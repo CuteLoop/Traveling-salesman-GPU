@@ -1,0 +1,913 @@
+# GPU Transition Roadmap — GA for TSP
+### `ga-tsp` · University of Arizona · Applied Mathematics
+**Version:** 1.0 · **Status:** Living Document  
+**Prerequisite:** Phase 10 (Serial Baseline) exited cleanly. Regression suite archived.
+
+---
+
+> **The core discipline of this roadmap:**  
+> Replace one serial seam at a time. Measure everything. Verify against the CPU oracle after every phase.  
+> A fast wrong answer is worse than a slow right one.
+
+---
+
+## Table of Contents
+
+1. [Guiding Principles](#1-guiding-principles)
+2. [Toolchain Setup](#2-toolchain-setup)
+3. [Benchmarking Framework](#3-benchmarking-framework)
+4. [Profiling Metrics Reference](#4-profiling-metrics-reference)
+5. [Phase Overview](#5-phase-overview)
+6. [Phase 11 — CUDA Infrastructure and Naive Evaluation](#6-phase-11--cuda-infrastructure-and-naive-evaluation)
+7. [Phase 12 — Persistent Device Population and Transfer Elimination](#7-phase-12--persistent-device-population-and-transfer-elimination)
+8. [Phase 13 — Data Layout Pivot: AoS to SoA](#8-phase-13--data-layout-pivot-aos-to-soa)
+9. [Phase 14 — Device-Side RNG and Genetic Kernels](#9-phase-14--device-side-rng-and-genetic-kernels)
+10. [Phase 15 — Memory Hierarchy Optimization](#10-phase-15--memory-hierarchy-optimization)
+11. [Phase 16 — GPU 2-Opt Local Search](#11-phase-16--gpu-2-opt-local-search)
+12. [Phase 17 — Warp-Level Primitives and Kernel Fusion](#12-phase-17--warp-level-primitives-and-kernel-fusion)
+13. [Phase 18 — Final Benchmarking and Comparison](#13-phase-18--final-benchmarking-and-comparison)
+14. [Testing Strategy](#14-testing-strategy)
+15. [Speedup Tracking Table](#15-speedup-tracking-table)
+16. [Literature Reference Points](#16-literature-reference-points)
+
+---
+
+## 1. Guiding Principles
+
+**One seam at a time.**  
+Never migrate the whole algorithm at once. Move one module — e.g., evaluation — wrap it in a `cudaMemcpy` bridge, verify correctness against the CPU oracle, measure, then move forward. Skipping this discipline makes CUDA race conditions and memory faults nearly impossible to isolate.
+
+**Measure before optimizing.**  
+Every phase produces a profiling report before any optimization is applied. If you cannot point to a specific metric (load efficiency, occupancy, bank conflicts, transfer time) that is bad, you do not have a reason to optimize.
+
+**Memory over compute.**  
+GPUs are memory-bound. An optimization that does more arithmetic but reads less from global memory is almost always a net win. The roofline model applies: identify whether each kernel is compute-bound or memory-bound before choosing an optimization strategy.
+
+**The CPU oracle is permanent.**  
+The Phase 10 serial baseline remains the correctness reference for every GPU phase. No GPU result is accepted unless its tour lengths and fitness values match the CPU baseline within documented tolerance on the fixed-seed regression suite.
+
+**Prefer algorithmic upgrades over micro-optimizations.**  
+A hybrid GA + 2-opt memetic approach will outperform a heavily tuned pure GA on solution quality. Do not spend three sprints on warp shuffles if the algorithm is structurally weak.
+
+---
+
+## 2. Toolchain Setup
+
+### Build Targets
+
+```makefile
+# Add to existing Makefile
+
+NVCC        = nvcc
+CUDA_FLAGS  = -O2 -arch=sm_80 -std=c++17 --compiler-options -Wall
+CUDA_DEBUG  = -G -g -arch=sm_80 -fsanitize=address   # correctness builds
+CUDA_PERF   = -O3 -arch=sm_80 -lineinfo               # profiling builds
+
+cuda_all:    ga_cuda
+cuda_test:   run_cuda_tests
+cuda_debug:  ga_cuda_debug
+cuda_perf:   ga_cuda_perf
+```
+
+> **Architecture flag.**  Check the UA HPC cluster GPU model and set `-arch` accordingly.  
+> V100 → `sm_70` · A100 → `sm_80` · H200 → `sm_90`
+
+### Required Tools
+
+| Tool | Purpose | Install |
+|------|---------|---------|
+| `nvcc` | CUDA compiler | via CUDA toolkit module |
+| `nsys` (Nsight Systems) | Timeline profiling, kernel launches, transfers | `module load cuda` |
+| `ncu` (Nsight Compute) | Per-kernel metrics: occupancy, bandwidth, efficiency | `module load cuda` |
+| `cuda-memcheck` / `compute-sanitizer` | GPU memory error detection | Ships with CUDA toolkit |
+| `nvprof` | Lightweight profiling fallback | Ships with older CUDA |
+
+```bash
+# UA HPC cluster setup
+module load cuda/12.x
+module load gcc/12
+
+# Verify CUDA installation
+nvcc --version
+nsys --version
+ncu --version
+```
+
+---
+
+## 3. Benchmarking Framework
+
+Every phase closes with a **benchmarking report** using the following instance and configuration matrix.
+
+### Instance Set
+
+| Instance | Cities | Purpose |
+|----------|--------|---------|
+| `square_4.tsp` | 4 | Correctness oracle (exact solution known) |
+| `smoke_20.tsp` | 20 | Smoke and fast regression |
+| `benchmark_100.tsp` | 100 | Serial baseline reference |
+| `medium_500.tsp` | 500 | GPU scaling test |
+| `large_1000.tsp` | 1000 | Memory pressure and coalescing test |
+
+### Configuration Matrix
+
+```
+Population sizes : [128, 512, 2048, 8192]
+Generations      : [100, 500, 1000]
+Seeds            : [42, 7, 1337]         (three independent runs)
+Build            : serial -O3, naive GPU, optimized GPU
+```
+
+### Metrics Collected Per Phase
+
+| Metric | Tool | Unit |
+|--------|------|------|
+| Best tour length | application | distance |
+| Optimality gap vs serial baseline | application | % |
+| Total wall-clock time | `time` / `nsys` | ms |
+| Per-generation time | application timer | ms/gen |
+| Kernel execution time | `nsys` / `ncu` | ms |
+| H2D / D2H transfer time | `nsys` | ms |
+| Transfer as % of total | derived | % |
+| Global load efficiency | `ncu` | % |
+| Achieved memory bandwidth | `ncu` | GB/s |
+| SM occupancy | `ncu` | % |
+| Warp efficiency | `ncu` | % |
+| Speedup vs serial -O3 | derived | ×N |
+
+### Profiling Commands
+
+```bash
+# Timeline overview — use this first, every phase
+nsys profile --stats=true \
+    ./ga_cuda --instance medium_500.tsp --pop 2048 --gen 500 --seed 42
+
+# Per-kernel deep dive — use when a specific kernel is the bottleneck
+ncu --set full \
+    --kernel-name "evaluate_population" \
+    ./ga_cuda --instance medium_500.tsp --pop 2048 --gen 100 --seed 42
+
+# Memory error detection — run on correctness builds
+compute-sanitizer --tool memcheck ./ga_cuda_debug \
+    --instance smoke_20.tsp --pop 128 --gen 50 --seed 42
+```
+
+---
+
+## 4. Profiling Metrics Reference
+
+Use these targets to decide whether a phase's optimization actually succeeded.
+
+| Metric | Naive GPU (Phase 11) Target | Optimized Target | Tool |
+|--------|-----------------------------|-----------------|------|
+| Global load efficiency | < 20% | > 80% | `ncu` |
+| Achieved bandwidth | < 100 GB/s | > 700 GB/s (A100 peak ~2 TB/s) | `ncu` |
+| SM occupancy | < 30% | > 60% | `ncu` |
+| Transfer time / total | > 60% | < 10% | `nsys` |
+| Kernel time / total | < 30% | > 85% | `nsys` |
+| Bank conflicts (shared mem) | N/A | 0 | `ncu` |
+
+> These are targets, not guarantees. Record actual values; do not assume.
+
+---
+
+## 5. Phase Overview
+
+```
+Phase 11  │  CUDA infrastructure + naive evaluation kernel
+           │  → first GPU number; correctness before speed
+Phase 12  │  Persistent device population; eliminate per-generation transfers
+           │  → memory bridge removed
+Phase 13  │  AoS → SoA data layout pivot
+           │  → coalescing: load efficiency target > 80%
+Phase 14  │  Device-side RNG (cuRAND) + crossover + mutation kernels
+           │  → full generation loop on device
+Phase 15  │  Shared memory and constant memory tiling
+           │  → memory hierarchy: reduce global memory pressure
+Phase 16  │  GPU 2-opt local search — memetic upgrade
+           │  → solution quality and GPU utilization
+Phase 17  │  Warp-level primitives + kernel fusion
+           │  → squeeze final 10–20% from hardware
+Phase 18  │  Final benchmarking and comparison suite
+           │  → defensible results for report / paper
+```
+
+---
+
+## 6. Phase 11 — CUDA Infrastructure and Naive Evaluation
+
+**Goal:** Establish the CUDA compilation pipeline. Write the first kernel. Prove it produces correct numbers. Do not optimize.
+
+### Deliverables
+
+- [ ] `Makefile` updated with `nvcc` targets: `cuda_all`, `cuda_test`, `cuda_debug`, `cuda_perf`
+- [ ] `cudaMalloc` / `cudaMemcpy` wrappers for `TSPInstance`
+- [ ] `kernel_evaluate_population` — naive, one thread per tour
+- [ ] `compute-sanitizer` integration in `cuda_debug` target
+- [ ] Profiling baseline report (Phase 11 metrics recorded before any optimization)
+
+### Kernel Design: Naive AoS
+
+Keep the Array of Structures layout from the serial code. The goal this phase is a correct number, not a fast one. Every subsequent phase measures improvement against this naive baseline.
+
+```cuda
+__global__ void evaluate_population_naive(
+        int    *d_cities,    /* AoS: pop[i].cities pointer — will change in Phase 13 */
+        double *d_lengths,
+        double *d_fitness,
+        const double *d_dist,
+        int n, int N)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    /* Each thread walks its own tour independently.
+       Non-coalesced: thread i and thread i+1 access addresses
+       separated by sizeof(Tour). Accepted for now. */
+    int   *cities = d_cities + tid * n;
+    double length = 0.0;
+
+    for (int k = 0; k < n - 1; k++)
+        length += d_dist[cities[k] * n + cities[k + 1]];
+    length += d_dist[cities[n - 1] * n + cities[0]];
+
+    d_lengths[tid] = length;
+    d_fitness[tid] = 1.0 / length;
+}
+```
+
+### Launch Configuration
+
+```cuda
+int threads_per_block = 256;
+int blocks = (N + threads_per_block - 1) / threads_per_block;
+evaluate_population_naive<<<blocks, threads_per_block>>>(
+    d_cities, d_lengths, d_fitness, d_dist, n, N);
+cudaDeviceSynchronize();
+```
+
+### Phase Gate
+
+```bash
+# Correctness: GPU output matches CPU baseline exactly
+make cuda_test SUITE=fitness_gpu    # tolerance: < 1e-9 on all lengths
+
+# Memory: no errors
+compute-sanitizer ./ga_cuda_debug \
+    --instance smoke_20.tsp --pop 128 --gen 1 --seed 42
+
+# Profile: record naive baseline — do not optimize yet
+nsys profile --stats=true ./ga_cuda_perf \
+    --instance medium_500.tsp --pop 2048 --gen 1 --seed 42
+# Record: kernel time, transfer time, load efficiency → Phase 11 baseline row
+```
+
+### Expected Findings (Phase 11 Profiling)
+
+- Transfer time dominates: > 60% of total time is `cudaMemcpy`
+- Load efficiency: < 20% due to AoS non-coalesced access
+- Kernel execution: a small fraction of total time
+
+These are not failures. They are the documented starting point that subsequent phases improve against.
+
+---
+
+## 7. Phase 12 — Persistent Device Population and Transfer Elimination
+
+**Goal:** Stop paying `cudaMemcpy` costs every generation. Keep the population resident in device memory for the entire run. Only copy summary statistics (best length, mean) back to host for logging.
+
+### The Transfer Problem
+
+In a naive port, every generation does:
+
+```
+CPU: select parents → crossover → mutate
+      ↓ cudaMemcpy H2D
+GPU: evaluate offspring
+      ↓ cudaMemcpy D2H
+CPU: extract elites → log statistics
+```
+
+For 1000 generations with a population of 2048 tours of 500 cities, this is 2048 × 500 × 8 bytes × 2 × 1000 = **~16 GB of transfers** that could be nearly zero.
+
+### Refactored Data Flow
+
+```
+GPU: [population resident]
+     per generation:
+       evaluate → select → crossover → mutate → evaluate → extract elite indices
+       ↓ cudaMemcpy D2H (scalars only)
+CPU: receive: best_length, mean_length, elite_indices → log statistics
+```
+
+### Deliverables
+
+- [ ] `cudaMalloc` for full population arrays at program start; `cudaFree` at exit
+- [ ] Per-generation D2H copy reduced to scalar summary array only
+- [ ] Driver refactored: host loop issues kernel launches without rebuilding device state
+- [ ] `GADriverGPU` struct: holds all device pointers for the run lifetime
+
+### Phase Gate
+
+```bash
+make cuda_test SUITE=fitness_gpu       # correctness unchanged
+make cuda_test SUITE=persistence_gpu   # 100-generation run, outputs match serial
+
+# Profile: quantify transfer reduction
+nsys profile ./ga_cuda_perf --instance medium_500.tsp --pop 2048 --gen 100 --seed 42
+# Target: transfer time < 10% of total
+```
+
+### Expected Speedup
+
+Transfer elimination is often the single largest speedup step in a naive-to-optimized CUDA port. Expect **3–10× improvement** in total runtime compared to Phase 11 before touching any kernel code.
+
+---
+
+## 8. Phase 13 — Data Layout Pivot: AoS to SoA
+
+**Goal:** Refactor the population memory layout from Array of Structures to Structure of Arrays to enable coalesced memory access in all genetic kernels.
+
+### Why This Is the Critical Architectural Step
+
+In the AoS layout, when thread $i$ and thread $i+1$ each read gene $k$ of their respective tours, the hardware sees:
+
+```
+Thread 0 → address: base + 0 * n * sizeof(int) + k * sizeof(int)
+Thread 1 → address: base + 1 * n * sizeof(int) + k * sizeof(int)
+Thread 2 → address: base + 2 * n * sizeof(int) + k * sizeof(int)
+...
+```
+
+These addresses are separated by `n * sizeof(int)` bytes. For $n = 500$, adjacent threads access memory 2000 bytes apart. The hardware cannot merge these into a single transaction and issues 32 separate 32-byte loads for one warp — **32× the necessary memory traffic**.
+
+In the transposed SoA layout, when all threads read gene $k$:
+
+```
+Thread i → address: base + k * N * sizeof(int) + i * sizeof(int)
+```
+
+Adjacent threads access adjacent memory. The warp issues a single 128-byte coalesced transaction.
+
+### SoA Layout
+
+```cuda
+/* Structure of Arrays: gene-major layout
+   pop_cities[k * N + i] = city at position k in tour i */
+typedef struct {
+    int    *cities;   /* [n_cities * pop_size]   gene-major   */
+    double *length;   /* [pop_size]                           */
+    double *fitness;  /* [pop_size]                           */
+    int     n;        /* cities per tour                      */
+    int     N;        /* population size                      */
+} PopulationSoA;
+
+/* Access macro */
+#define GENE(pop, city_pos, individual)  \
+    ((pop)->cities[(city_pos) * (pop)->N + (individual)])
+```
+
+### Updated Evaluation Kernel
+
+```cuda
+__global__ void evaluate_population_soa(
+        const int    *d_cities,   /* gene-major: [n * N] */
+        double       *d_lengths,
+        double       *d_fitness,
+        const double *d_dist,
+        int n, int N)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    double length = 0.0;
+    int prev = d_cities[0 * N + tid];   /* gene 0 of individual tid */
+
+    for (int k = 1; k < n; k++) {
+        int curr = d_cities[k * N + tid];   /* coalesced: all threads read gene k */
+        length += d_dist[prev * n + curr];
+        prev = curr;
+    }
+    length += d_dist[prev * n + d_cities[0 * N + tid]];   /* close tour */
+
+    d_lengths[tid] = length;
+    d_fitness[tid] = 1.0 / length;
+}
+```
+
+### Deliverables
+
+- [ ] `PopulationSoA` struct and allocation helpers
+- [ ] AoS → SoA and SoA → AoS conversion utilities (for CPU interop during transition)
+- [ ] All kernels updated to SoA access patterns
+- [ ] CPU serial code updated to use the same layout (maintains 1:1 comparison)
+
+### Phase Gate
+
+```bash
+make cuda_test SUITE=layout_gpu    # SoA values match AoS values entry-wise
+
+# Profiling gate — this is a hard requirement, not advisory
+ncu --metrics l1tex__t_bytes_pipe_lsu_mem_global_op_ld.sum.per_second \
+    --kernel-name "evaluate_population_soa" \
+    ./ga_cuda_perf --instance medium_500.tsp --pop 2048 --gen 1 --seed 42
+
+# Required: global load efficiency must exceed 80%
+# If it does not, the layout is wrong — do not proceed to Phase 14
+```
+
+---
+
+## 9. Phase 14 — Device-Side RNG and Genetic Kernels
+
+**Goal:** Move crossover, mutation, and parent selection onto the GPU. Eliminate the last remaining reasons for the population to touch the CPU every generation.
+
+### cuRAND Setup
+
+One `curandState` per individual. Seeding uses a deterministic function of the master seed, individual index, and generation number — ensuring reproducibility without serialization.
+
+```cuda
+__global__ void init_rng(curandState *states, uint64_t master_seed, int N) {
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+    /* Each individual gets a unique, deterministic stream */
+    curand_init(master_seed, tid, 0, &states[tid]);
+}
+```
+
+### Tournament Selection Kernel
+
+Tournament selection is the only viable parallel selection strategy. It requires no global prefix sums, no inter-thread communication, and assigns one thread per offspring slot.
+
+```cuda
+__global__ void tournament_select(
+        const double *d_fitness,
+        int *d_parent_a, int *d_parent_b,
+        curandState *states,
+        int N, int k)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    curandState local = states[tid];
+
+    /* Select parent A */
+    int best_a = curand(&local) % N;
+    for (int i = 1; i < k; i++) {
+        int cand = curand(&local) % N;
+        if (d_fitness[cand] > d_fitness[best_a]) best_a = cand;
+    }
+
+    /* Select parent B (distinct from A) */
+    int best_b;
+    do { best_b = curand(&local) % N; } while (best_b == best_a);
+    for (int i = 1; i < k; i++) {
+        int cand = curand(&local) % N;
+        if (d_fitness[cand] > d_fitness[best_b] && cand != best_a) best_b = cand;
+    }
+
+    d_parent_a[tid] = best_a;
+    d_parent_b[tid] = best_b;
+    states[tid] = local;
+}
+```
+
+### Crossover Kernel Notes
+
+OX1 on GPU uses a shared-memory lookup buffer per thread block or a per-thread register bitmask for small $n$. Branch divergence is the main concern: the traversal of parent B is data-dependent.
+
+```cuda
+/* For n <= 64: register bitmask avoids shared memory and branch divergence */
+uint64_t used = 0ULL;
+/* Mark city c as used: used |= (1ULL << c)  */
+/* Check if used:        (used >> c) & 1ULL   */
+```
+
+For $n > 64$: use `__shared__` boolean array of size $n$, initialized cooperatively if thread block handles multiple individuals.
+
+### Mutation Kernel
+
+Use a single operator per kernel launch. Mixed operators inside one kernel create warp divergence.
+
+```cuda
+__global__ void mutate_swap(
+        int *d_cities, curandState *states,
+        double mut_rate, int n, int N)
+{
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+    if (tid >= N) return;
+
+    curandState local = states[tid];
+    if (curand_uniform(&local) < mut_rate) {
+        int i = curand(&local) % n;
+        int j = curand(&local) % n;
+        /* SoA swap: swap gene i and gene j for individual tid */
+        int tmp = d_cities[i * N + tid];
+        d_cities[i * N + tid] = d_cities[j * N + tid];
+        d_cities[j * N + tid] = tmp;
+    }
+    states[tid] = local;
+}
+```
+
+### Deliverables
+
+- [ ] `curandState` array, initialization kernel, deterministic seeding
+- [ ] `kernel_tournament_select`
+- [ ] `kernel_crossover_ox1` with bitmask duplicate detection
+- [ ] `kernel_mutate_swap`, `kernel_mutate_invert`
+- [ ] Fully resident GA loop: host issues kernel launches; population never copied to CPU
+
+### Phase Gate
+
+```bash
+make cuda_test SUITE=operators_gpu
+
+# Stress: 1,000,000 offspring — zero invalid permutations allowed
+./tests/stress_crossover_gpu --n 100 --trials 1000000 --seed 42
+# Expected: "0 invalid offspring"
+
+# Full run correctness check
+# Note: exact bit-for-bit match with serial is not required here
+# (cuRAND and splitmix64 diverge), but:
+#   - best tour length within 5% of serial baseline for same gen budget
+#   - all tours valid at every generation
+```
+
+---
+
+## 10. Phase 15 — Memory Hierarchy Optimization
+
+**Goal:** Reduce global memory pressure by tiling frequently accessed read-only data into faster memory tiers.
+
+### Distance Matrix Placement Strategy
+
+| Instance Size | Strategy | Memory Tier | Bandwidth |
+|---------------|----------|-------------|-----------|
+| $n \leq 128$ (~128 KB) | Pin to constant memory | L1/L2 broadcast | ~10 TB/s (broadcast) |
+| $128 < n \leq 512$ (~2 MB) | Shared memory tiling per block | On-chip SRAM | ~19 TB/s |
+| $n > 512$ | L2-cached global memory | Global + L2 | ~2 TB/s |
+
+### Constant Memory (Small Instances)
+
+```cuda
+__constant__ double d_dist_const[128 * 128];   /* 128 KB fits in constant cache */
+
+/* In host setup: */
+cudaMemcpyToSymbol(d_dist_const, h_dist, n * n * sizeof(double));
+```
+
+All threads in a warp reading the same constant memory address receive it in a single broadcast. Ideal for distance lookups where all threads in a tour-evaluation block access the same entries.
+
+### Shared Memory Tiling (Medium Instances)
+
+```cuda
+__global__ void evaluate_population_tiled(
+        const int *d_cities, double *d_lengths,
+        const double *d_dist, int n, int N)
+{
+    extern __shared__ double s_dist[];   /* tile of distance matrix */
+    int tid = blockIdx.x * blockDim.x + threadIdx.x;
+
+    /* Cooperatively load a tile of the distance matrix */
+    int tile_size = blockDim.x;
+    for (int i = threadIdx.x; i < n * n && i < tile_size * tile_size; i += blockDim.x)
+        s_dist[i] = d_dist[i];
+    __syncthreads();
+
+    if (tid >= N) return;
+
+    double length = 0.0;
+    for (int k = 0; k < n - 1; k++) {
+        int a = d_cities[k * N + tid];
+        int b = d_cities[(k + 1) * N + tid];
+        length += s_dist[a * n + b];   /* shared memory: ~100× faster than global */
+    }
+    d_lengths[tid] = length;
+}
+```
+
+### Deliverables
+
+- [ ] Constant memory path for $n \leq 128$
+- [ ] Shared memory tiling path for $128 < n \leq 512$
+- [ ] Runtime dispatch based on instance size
+- [ ] Bank conflict analysis with `ncu`
+
+### Phase Gate
+
+```bash
+# Hard profiling gate: no shared memory bank conflicts
+ncu --metrics l1tex__data_bank_conflicts_pipe_lsu_mem_shared.sum \
+    --kernel-name "evaluate_population_tiled" \
+    ./ga_cuda_perf --instance benchmark_100.tsp --pop 2048 --gen 1 --seed 42
+# Required: bank conflicts = 0
+
+# Bandwidth improvement
+ncu --metrics dram__bytes_read.sum.per_second \
+    ./ga_cuda_perf --instance medium_500.tsp --pop 2048 --gen 100 --seed 42
+# Compare against Phase 13 baseline; target: significant reduction in DRAM reads
+```
+
+---
+
+## 11. Phase 16 — GPU 2-Opt Local Search
+
+**Goal:** Introduce a memetic component. This is the phase where the solver transitions from "fast GA" to "competitive TSP solver."
+
+### The Algorithmic Case for 2-Opt
+
+A standard GA generates diverse candidate tours but converges slowly on solution quality because crossover alone does not exploit local structure. The TSP literature is unambiguous: **local search is where quality lives**. LKH's dominance over pure evolutionary approaches is built on aggressive k-opt moves, not evolutionary operators.
+
+The GPU's strength is evaluating massive numbers of independent move candidates simultaneously — exactly what 2-opt requires. This is where GPU and algorithm reinforce each other naturally.
+
+### 2-Opt on GPU: Block-Collaborative Design
+
+Do **not** assign one thread per edge swap — the sequential search for the best improving move is too slow. Assign **one thread block per tour**: all threads in the block cooperatively evaluate all $O(n^2)$ candidate swaps, perform a parallel reduction to find the best improving swap, and apply it.
+
+```
+For tour i, one block of T threads:
+  Thread t evaluates edges (t, t+1), (t + T, t + T + 1), ...
+  (strided across the n*(n-1)/2 candidate pairs)
+  → parallel reduction within block: find best delta
+  → if best delta < 0: apply the swap (single thread writes)
+  → repeat until no improving move found (or iteration limit)
+```
+
+```cuda
+__global__ void two_opt_block(
+        int *d_cities, double *d_lengths,
+        const double *d_dist, int n, int N,
+        int max_iters)
+{
+    /* One block per tour */
+    int tour_id = blockIdx.x;
+    if (tour_id >= N) return;
+
+    extern __shared__ double s_delta[];   /* one entry per thread */
+
+    int *tour = d_cities + tour_id;       /* SoA: stride N between genes */
+
+    for (int iter = 0; iter < max_iters; iter++) {
+        double best_delta = 0.0;
+        int best_i = -1, best_j = -1;
+
+        /* Strided sweep of all (i, j) pairs */
+        int total_pairs = (n * (n - 1)) / 2;
+        for (int p = threadIdx.x; p < total_pairs; p += blockDim.x) {
+            /* Decode pair (i, j) from linear index p */
+            int i = /* ... */ , j = /* ... */;
+            double delta = /* 2-opt delta for (i, j) */;
+            if (delta < best_delta) { best_delta = delta; best_i = i; best_j = j; }
+        }
+
+        /* Block reduction: find global best */
+        s_delta[threadIdx.x] = best_delta;
+        __syncthreads();
+        for (int stride = blockDim.x / 2; stride > 0; stride >>= 1) {
+            if (threadIdx.x < stride && s_delta[threadIdx.x + stride] < s_delta[threadIdx.x])
+                s_delta[threadIdx.x] = s_delta[threadIdx.x + stride];
+            __syncthreads();
+        }
+
+        if (s_delta[0] >= 0.0) break;   /* no improvement: converged */
+
+        /* Thread 0 applies the best swap */
+        if (threadIdx.x == 0 && best_i >= 0)
+            /* reverse segment [i+1 .. j] in tour */;
+        __syncthreads();
+    }
+}
+```
+
+### Integration into the GA Loop
+
+Apply 2-opt every $K$ generations (not every generation) to control overhead. A good default is $K = 10$ with a per-call iteration limit of 3–5 passes.
+
+```
+GA loop:
+  every generation: select → crossover → mutate → evaluate
+  every K generations: 2-opt local search on all individuals → re-evaluate
+```
+
+### Deliverables
+
+- [ ] `kernel_two_opt_block` with block-collaborative reduction
+- [ ] Integration into `ga_run_gpu` with configurable `local_search_interval`
+- [ ] Tour validator called on all post-2-opt tours in debug builds
+
+### Phase Gate
+
+```bash
+# Correctness: 2-opt never produces invalid tours
+./tests/stress_2opt_gpu --n 50 --pop 1024 --iters 5 --seed 42
+# Required: "0 invalid tours"
+
+# Quality: 2-opt improves tour length
+./ga_cuda_perf --instance medium_500.tsp --pop 512 --gen 200 --seed 42 --local-search 10
+# Required: best tour length < best tour length without local search at matched time budget
+
+# GPU utilization: 2-opt kernel should use > 70% SM occupancy
+ncu --metrics sm__warps_active.avg.pct_of_peak_sustained_active \
+    --kernel-name "two_opt_block" \
+    ./ga_cuda_perf --instance medium_500.tsp --pop 512 --gen 1 --seed 42 --local-search 1
+```
+
+---
+
+## 12. Phase 17 — Warp-Level Primitives and Kernel Fusion
+
+**Goal:** Extract the final 10–20% of hardware performance using low-level CUDA intrinsics and reduce kernel launch overhead through fusion.
+
+> **Important calibration.**  Only pursue this phase if profiling shows that `__syncthreads` and shared memory latency are measured bottlenecks. Do not optimize speculatively.
+
+### Warp Shuffle: Replace Shared Memory Reductions
+
+Warp shuffle instructions (`__shfl_sync`, `__shfl_xor_sync`) allow threads within the same warp to read each other's registers directly, bypassing shared memory entirely and eliminating `__syncthreads` overhead.
+
+```cuda
+/* Replace this shared-memory reduction: */
+s_val[threadIdx.x] = local_val;
+__syncthreads();
+if (threadIdx.x == 0) result = s_val[0] + s_val[1] + ...;
+
+/* With this warp-shuffle reduction (32 threads, no shared memory): */
+double val = local_val;
+for (int offset = 16; offset > 0; offset >>= 1)
+    val += __shfl_xor_sync(0xFFFFFFFF, val, offset);
+/* Lane 0 now holds the warp sum with zero shared memory and zero syncthreads */
+```
+
+Apply to: fitness evaluation reduction, 2-opt delta reduction within warps.
+
+### Kernel Fusion Candidates
+
+| Fusion | Benefit | Risk |
+|--------|---------|------|
+| Crossover + Mutation | One launch instead of two | Increased register pressure |
+| Mutation + Evaluation | Evaluate immediately after mutate | Harder to validate separately |
+| 2-opt + Evaluation | Avoid re-launching evaluator | Complex kernel; debug carefully |
+
+**Rule:** Only fuse kernels if `nsys` shows that kernel launch overhead (not execution time) is a measured bottleneck. Premature fusion increases register pressure and reduces occupancy.
+
+### Deliverables
+
+- [ ] Warp-shuffle fitness reduction in evaluation kernel
+- [ ] Warp-shuffle delta reduction in 2-opt kernel
+- [ ] Profiling comparison: fused vs unfused kernels on benchmark suite
+- [ ] Register usage report: verify fusion does not hurt occupancy
+
+### Phase Gate
+
+```bash
+# Regression must still pass after every intrinsic change
+make cuda_test SUITE=regression_gpu   # all Reg-* tests pass
+
+# Occupancy check: fusion must not reduce occupancy below Phase 16 values
+ncu --metrics sm__warps_active.avg.pct_of_peak_sustained_active \
+    --kernel-name "evaluate_and_mutate_fused" \
+    ./ga_cuda_perf --instance medium_500.tsp --pop 2048 --gen 1 --seed 42
+```
+
+---
+
+## 13. Phase 18 — Final Benchmarking and Comparison
+
+**Goal:** Produce complete, defensible results comparing all implementation tiers.
+
+### Benchmark Ladder
+
+| Implementation | Build Flag | Description |
+|---------------|------------|-------------|
+| Serial `-O3` | `BUILD=release` | Phase 10 CPU baseline |
+| Naive GPU | Phase 11 binary | AoS, per-generation transfers |
+| Resident GPU | Phase 12 binary | No transfers, AoS layout |
+| SoA GPU | Phase 13 binary | Coalesced layout |
+| Full GPU | Phase 14 binary | All operators on device |
+| Optimized GPU | Phase 15-16 binary | Shared memory + 2-opt |
+| Peak GPU | Phase 17 binary | Warp shuffles + fusion |
+
+### Required Plots
+
+1. **Speedup vs serial baseline** — all GPU tiers, across population sizes
+2. **Solution quality vs wall-clock time** — serial GA vs GPU GA vs GPU memetic
+3. **Optimality gap** — best tour / known optimal (for standard TSPLIB instances)
+4. **Profiling waterfall** — time breakdown by operation at each phase
+5. **Memory bandwidth utilization** — phase-over-phase improvement
+
+### Deliverables
+
+- [ ] `scripts/benchmark_all.sh` — runs full matrix, produces CSVs
+- [ ] `scripts/plot_results.py` — generates all required plots
+- [ ] `results/final/` — archived CSVs, plots, profiling reports
+- [ ] Updated regression baseline if Phase 17 changed any output format
+
+### Phase Gate
+
+```bash
+# Full benchmark run (may take hours on large instances)
+./scripts/benchmark_all.sh --output results/final/
+
+# Verify regression outputs unchanged
+./scripts/compare_baseline.sh \
+    results/serial_baseline.csv results/final/serial_rerun.csv
+# Required: all distances within 0.01% tolerance
+
+# No GPU result claims speedup against an unoptimized CPU build
+# All CPU comparisons use -O3 -march=native
+```
+
+---
+
+## 14. Testing Strategy
+
+For every GPU phase, four test classes are required. No phase gate waives any class.
+
+### A — Exact Equivalence Tests
+
+Used for deterministic operators (evaluation, fixed-input crossover, fixed-input mutation). CPU and GPU outputs must match within tolerance.
+
+```bash
+# Example: verify evaluation kernel
+./tests/test_evaluate_gpu --instance square_4.tsp --pop 16 --seed 42
+# Expected: all 16 tour lengths within 1e-9 of CPU reference
+```
+
+### B — Invariant Tests
+
+These do not require exact value matches; they enforce structural correctness.
+
+| Invariant | Required |
+|-----------|----------|
+| Every tour is a valid permutation | After every crossover, mutation, 2-opt call |
+| Population size is constant | After every generation |
+| Best-so-far is non-increasing under elitism | Across all generations |
+| No NaN or Inf in fitness array | After every evaluation |
+
+```bash
+compute-sanitizer --tool memcheck ./ga_cuda_debug \
+    --instance medium_500.tsp --pop 512 --gen 200 --seed 42
+# Required: zero out-of-bounds accesses
+```
+
+### C — Statistical Tests
+
+For operators where exact equivalence with serial is not achievable (different RNG).
+
+| Test | Criterion |
+|------|-----------|
+| Selection pressure | Best individual wins > 85% of 10,000 tournaments (k=2) |
+| Mutation frequency | At `p_m = 0.5`, 45%–55% of tours change per generation |
+| Population diversity | Shannon entropy of fitness does not collapse before gen 100 |
+
+### D — Performance Regression Tests
+
+An optimization that doesn't improve a measurable metric is not accepted.
+
+| Phase | Required Improvement |
+|-------|---------------------|
+| 12 | Transfer time < 10% of total (was > 60%) |
+| 13 | Global load efficiency > 80% (was < 20%) |
+| 15 | DRAM read bytes reduced vs Phase 13 |
+| 16 | Best tour quality improves vs Phase 14 at matched time |
+| 17 | Kernel count per generation reduced vs Phase 16 |
+
+---
+
+## 15. Speedup Tracking Table
+
+Update this table after each phase benchmarking run. Instance: `medium_500.tsp`, population 2048, 500 generations, seed 42.
+
+| Phase | Description | Wall Time (s) | Speedup vs Serial | Load Efficiency | Transfer % |
+|-------|-------------|--------------|-------------------|-----------------|------------|
+| Serial -O3 | CPU baseline | — | 1.0× | N/A | N/A |
+| Phase 11 | Naive evaluation kernel | — | — | — | — |
+| Phase 12 | Persistent population | — | — | — | — |
+| Phase 13 | SoA layout | — | — | — | — |
+| Phase 14 | All operators on device | — | — | — | — |
+| Phase 15 | Shared/constant memory | — | — | — | — |
+| Phase 16 | + 2-opt local search | — | — | — | — |
+| Phase 17 | + Warp shuffles + fusion | — | — | — | — |
+
+*Fill in during Phase 18 final benchmarking.*
+
+---
+
+## 16. Literature Reference Points
+
+These provide context for where your implementation should sit relative to the state of the art.
+
+| Reference | Relevance |
+|-----------|-----------|
+| TSP_GPU v2.3 (Burtscher & Pingali, Texas State) | GPU-accelerated 2-opt hill climbing; benchmark for local search throughput |
+| Molina et al., PDPTA 2011 — *A Parallel GPU Version of the TSP* | CUDA GA + 2-opt hybridization; directly analogous architecture |
+| Helsgaun — *General k-opt submoves for Lin–Kernighan* | CPU quality reference; LKH is the standard TSP heuristic baseline |
+| Burtscher et al., GPGPU 2015 — *Rethinking Parallelization of Hill Climbing* | Memory access and warp divergence analysis for GPU local search |
+
+**How to use these:** do not benchmark against LKH as if you expect to win on solution quality — LKH uses decades of TSP-specific engineering. Use it as an **optimality gap reference**: report how far your best solution is from LKH's solution, not whether you beat it.
+
+For GPU-to-GPU comparisons, TSP_GPU v2.3 is the honest target. Reproducing a fraction of its throughput on 2-opt move evaluation is a meaningful result.
+
+---
+
+*GPU Roadmap · `ga-tsp` · Joel Maldonado · University of Arizona · v1.0*

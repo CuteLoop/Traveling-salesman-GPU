@@ -20,7 +20,18 @@ The Python baseline is the ground truth. Every subsequent implementation must pr
 
 ## Algorithm — Genetic Algorithm
 
-![GA Flowchart](img/flow-chart.png)
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="img/flow-chart.png" alt="Sequential GA Flowchart" width="100%"/><br/>
+      <sub><b>Sequential GA</b></sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="img/parallel-flow-chart.png" alt="Parallel GA Flowchart" width="100%"/><br/>
+      <sub><b>Parallel GA (GPU)</b></sub>
+    </td>
+  </tr>
+</table>
 
 ---
 
@@ -148,11 +159,11 @@ The distance matrix is computed using the **Haversine formula** (great-circle di
 
 Interactive HTML tour maps: `results/map_aco.html`, `results/map_ga.html`
 
-### ACO Best Tour
+### GA Best Tour
 
-![Madeira ACO Tour](img/madeira_aco_tour.png)
+![Madeira GA Tour](img/madeira_ga_tour.png)
 
-City numbers correspond to the `id` column in [`data/madeira_cities.csv`](data/madeira_cities.csv). The red dot marks the tour start city (Ribeiro Frio, city 25).
+City numbers correspond to the `id` column in [`data/madeira_cities.csv`](data/madeira_cities.csv). The yellow dot marks the tour start city.
 
 Key observations:
 - ACO and GA converge to the same tour distance (130.55 km), confirming solution quality.

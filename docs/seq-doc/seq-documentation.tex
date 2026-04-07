@@ -1,0 +1,528 @@
+\documentclass[11pt, letterpaper]{article}
+
+% -----------------------------------------------------------------------
+% Packages
+% -----------------------------------------------------------------------
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[expansion=false]{microtype}       % better text rendering
+\usepackage{amsmath, amsfonts, amssymb}
+\usepackage{geometry}
+\usepackage{booktabs}
+\usepackage{array}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{parskip}
+\usepackage{fancyhdr}
+\usepackage{abstract}
+\usepackage{listings}
+\usepackage[linesnumbered, ruled, vlined]{algorithm2e}
+\usepackage{caption}
+\usepackage{subcaption}
+
+% -----------------------------------------------------------------------
+% Layout
+% -----------------------------------------------------------------------
+\geometry{margin=1in, top=1.1in, bottom=1.1in}
+
+\hypersetup{
+  colorlinks = true,
+  linkcolor  = blue!70!black,
+  urlcolor   = cyan!70!black,
+  citecolor  = green!50!black
+}
+
+% Section formatting — small caps title, rule underneath
+\titleformat{\section}
+  {\large\bfseries\scshape}
+  {\thesection.}{0.6em}{}[\vspace{-0.4em}\rule{\linewidth}{0.4pt}]
+
+\titleformat{\subsection}
+  {\normalsize\bfseries}
+  {\thesubsection.}{0.5em}{}
+
+\titleformat{\subsubsection}
+  {\normalsize\itshape}
+  {\thesubsubsection.}{0.5em}{}
+
+% -----------------------------------------------------------------------
+% Code listing style
+% -----------------------------------------------------------------------
+\lstdefinestyle{cstyle}{
+  language        = C,
+  basicstyle      = \ttfamily\small,
+  keywordstyle    = \color{blue!70!black}\bfseries,
+  commentstyle    = \color{gray}\itshape,
+  stringstyle     = \color{orange!80!black},
+  numbers         = left,
+  numberstyle     = \tiny\color{gray},
+  numbersep       = 8pt,
+  frame           = single,
+  frameround      = tttt,
+  rulecolor       = \color{black!20},
+  breaklines      = true,
+  captionpos      = b,
+  tabsize         = 4,
+  showstringspaces= false
+}
+\lstset{style=cstyle}
+
+% -----------------------------------------------------------------------
+% Header / Footer
+% -----------------------------------------------------------------------
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{\small\scshape GA/TSP Technical Specification}
+\lhead{\small Joel Maldonado --- University of Arizona}
+\rfoot{\small\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+% -----------------------------------------------------------------------
+% Abstract formatting
+% -----------------------------------------------------------------------
+\renewcommand{\abstractnamefont}{\bfseries\scshape}
+\renewcommand{\abstracttextfont}{\small}
+\setlength{\absleftindent}{0.5in}
+\setlength{\absrightindent}{0.5in}
+
+% -----------------------------------------------------------------------
+% Convenience macros
+% -----------------------------------------------------------------------
+\newcommand{\hpcnote}[1]{%
+  \vspace{0.4em}
+  \noindent\colorbox{blue!6}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+    \footnotesize\textbf{HPC Note:}\enspace #1
+  }}
+  \vspace{0.4em}
+}
+
+\newcommand{\warn}[1]{%
+  \vspace{0.4em}
+  \noindent\colorbox{orange!10}{\parbox{\dimexpr\linewidth-2\fboxsep}{%
+    \footnotesize\textbf{GPU Constraint:}\enspace #1
+  }}
+  \vspace{0.4em}
+}
+
+% -----------------------------------------------------------------------
+% Document
+% -----------------------------------------------------------------------
+\title{%
+  \textbf{Technical Specification: GPGPU-Ready Genetic Algorithm}\\[0.4em]
+  \large Architecture for the Symmetric Traveling Salesman Problem
+}
+\author{%
+  Joel Maldonado\\
+  \small Department of Applied Mathematics, University of Arizona\\
+  \small \href{mailto:joelmaldonado@arizona.edu}{joelmaldonado@arizona.edu}
+}
+\date{April 2026 \quad|\quad Version 1.0}
+
+\begin{document}
+
+\maketitle
+\thispagestyle{fancy}
+
+\begin{abstract}
+This document specifies the software architecture for a modular, sequential Genetic
+Algorithm (GA) targeting the Traveling Salesman Problem (TSP), implemented in
+standard C99.  Although the initial execution target is a single CPU core, every
+architectural decision is made with NVIDIA CUDA in mind: memory layouts prefer
+coalescing patterns, all functions are stateless with respect to global storage,
+random-number generators are per-individual, and evaluation is batch-oriented to
+map directly onto kernel launches.  The document covers the formal problem
+definition, layer decomposition, data-structure design with AoS/SoA analysis,
+genetic operator specifications, a formal algorithm statement, complexity
+characterization, and a checklist of CUDA-readiness constraints.
+\end{abstract}
+
+\tableofcontents
+\bigskip
+
+% ======================================================================
+\section{Problem Formalization}
+% ======================================================================
+
+The Symmetric Traveling Salesman Problem is defined on a complete weighted graph
+$G = (V, E)$ where $|V| = n$.  The distance matrix $D \in \mathbb{R}^{n \times n}$
+satisfies $d_{ij} = d_{ji} \geq 0$ and $d_{ii} = 0$.  Given the coordinates
+$(x_k, y_k)$ for city $k$, the Euclidean distance is
+\[
+  d_{ij} = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}.
+\]
+A \emph{tour} is a bijection $\pi: \{0,\dots,n-1\} \to \{0,\dots,n-1\}$ encoding
+a Hamiltonian cycle.  The objective is
+\begin{equation}
+  \min_{\pi \in S_n}\; L(\pi)
+  = \sum_{k=0}^{n-2} d_{\pi_k,\,\pi_{k+1}} + d_{\pi_{n-1},\,\pi_0},
+  \label{eq:objective}
+\end{equation}
+where $S_n$ denotes the symmetric group on $n$ elements.  Because $L$ is
+symmetric in $d$, the search space has effective size $(n-1)!/2$.
+
+% ======================================================================
+\section{System Architecture}
+% ======================================================================
+
+The implementation is decomposed into five loosely-coupled layers.  Each layer
+exposes a well-defined functional interface and holds no mutable global state,
+a constraint that directly enables CUDA kernel extraction.
+
+\begin{table}[h]
+\centering
+\caption{Layer definitions and forward-looking GPU porting strategies.}
+\label{tab:layers}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{} p{2.4cm} p{4.2cm} p{5.8cm} @{}}
+\toprule
+\textbf{Layer} & \textbf{Responsibility} & \textbf{CUDA Porting Strategy} \\
+\midrule
+Instance        & Coordinate I/O; distance matrix construction
+                & Pin $D$ to constant memory ($n \leq 256$) or L2-cached global memory \\
+Representation  & Population and tour memory management
+                & Migrate AoS layout to SoA for coalesced access \\
+Evaluation      & Fitness computation; tour validation
+                & One thread per individual; parallel reduction within tour \\
+Evolution       & Selection, crossover, mutation, elitism
+                & Warp-level primitives (\texttt{\_\_shfl\_sync}) for tournament logic \\
+Control         & GA main loop; termination criteria
+                & Remains host-side; issues asynchronous kernel launches \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ======================================================================
+\section{Data Structures and Memory Layout}
+% ======================================================================
+
+\subsection{Distance Matrix}
+
+The matrix $D$ is allocated once at startup and treated as read-only for the
+entirety of GA execution.  It is stored in row-major order as a flat array of
+\texttt{double}, indexed by $i \cdot n + j$.
+
+\hpcnote{For small instances ($n \leq 256$, i.e., $\leq 512$\,KiB at 64-bit),
+$D$ fits in CUDA constant memory and benefits from broadcast reads when all
+threads in a warp address the same entry.  For larger instances it must reside
+in global memory; a symmetric half-matrix layout ($n(n+1)/2$ elements) reduces
+footprint and may improve cache utilization.}
+
+\subsection{Tour Representation}
+
+A tour is a permutation stored as an integer array of length $n$.  The
+associated struct carries precomputed fitness to avoid redundant evaluation:
+
+\begin{lstlisting}[caption={Sequential tour struct (AoS element).}]
+typedef struct {
+    int    *cities;    /* permutation of {0, ..., n-1}         */
+    double  length;    /* total Euclidean tour length           */
+    double  fitness;   /* derived from length; higher is better */
+} Tour;
+\end{lstlisting}
+
+\textbf{Invariant.}  After any genetic operator, every valid tour $\pi$ must
+satisfy $\{\pi_0, \dots, \pi_{n-1}\} = \{0, \dots, n-1\}$.  Violations
+indicate a logic error and are caught by the validation layer
+(Section~\ref{sec:validation}).
+
+\subsection{Population Layout: AoS vs.\ SoA}
+\label{sec:layout}
+
+The sequential implementation uses an \emph{Array of Structures} (AoS), which
+is natural for single-threaded access patterns.
+
+\begin{lstlisting}[caption={AoS: simple but GPU-hostile.}]
+Tour population[POP_SIZE];
+/* Thread i accesses population[i].cities[k]:
+   addresses stride by sizeof(Tour) -- non-coalesced. */
+\end{lstlisting}
+
+\warn{On a GPU, when thread $i$ and thread $i+1$ access \texttt{population[i].cities[k]}
+and \texttt{population[i+1].cities[k]} respectively, the hardware must issue
+$W$ independent 32-byte transactions for a warp of $W=32$ threads because the
+\texttt{cities} pointers are separated by \texttt{sizeof(Tour)} bytes.  This
+fully serializes what should be a single coalesced load.}
+
+The GPU-ready layout separates gene arrays from metadata:
+
+\begin{lstlisting}[caption={SoA: GPU-friendly, migration target.}]
+/* All gene-k values for the entire population are contiguous. */
+int    *pop_cities;    /* [POP_SIZE * n]  row i: cities of individual i  */
+double *pop_length;    /* [POP_SIZE]                                      */
+double *pop_fitness;   /* [POP_SIZE]                                      */
+
+/* Thread i reads gene k: pop_cities[i*n + k].
+   Threads 0..31 reading k=0 hit addresses {0,n,2n,...,31n} --
+   still strided.  Transpose to [n * POP_SIZE] with layout
+   pop_cities[k*POP_SIZE + i] for fully coalesced access. */
+\end{lstlisting}
+
+The transposed SoA layout (\texttt{pop\_cities[k * POP\_SIZE + i]}) ensures
+that a warp reading gene $k$ of all individuals issues a single coalesced
+128-byte transaction, reducing memory traffic by up to $32\times$.
+
+% ======================================================================
+\section{Genetic Operators}
+% ======================================================================
+
+\subsection{Initialization}
+
+The initial population is generated by Fisher--Yates shuffles seeded from a
+per-individual RNG state.  Diversity is guaranteed by construction; no
+duplicate-rejection loop is needed.
+
+\subsection{Fitness Evaluation}
+
+Tour length is computed directly from Equation~\eqref{eq:objective} using the
+precomputed matrix $D$.  Fitness is defined as the inverse of length,
+$f(\pi) = 1/L(\pi)$, so that higher fitness corresponds to shorter tours.
+
+\textbf{Parallelization structure.}  Evaluation is \emph{embarrassingly
+parallel} across the population: individual $i$'s fitness depends only on its
+own permutation and the read-only matrix $D$.  A future CUDA kernel assigns
+one thread block per individual, with each thread summing a contiguous segment
+of edges and a final warp reduction collecting the total.
+
+\subsection{Selection: Binary Tournament}
+
+For each offspring slot, two individuals are drawn uniformly at random and the
+fitter one is selected.  Tournament size $k=2$ is the default; $k$ can be
+tuned to control selection pressure without restructuring the algorithm.
+
+\hpcnote{Tournament selection requires no global information: each contest is
+$O(k)$ work and completely independent.  This contrasts with fitness-proportionate
+(roulette-wheel) selection, which requires an $O(N \log N)$ prefix scan over
+the entire population --- a bottleneck even with GPU-accelerated prefix sums.}
+
+\subsection{Crossover: Order Crossover (OX1)}
+\label{sec:ox1}
+
+Order Crossover preserves the relative ordering of cities inherited from one
+parent while filling remaining positions from the other.  The algorithm proceeds
+in three steps: (1) copy a contiguous segment $[\ell, r]$ from parent~$A$
+directly into the offspring; (2) traverse parent~$B$ starting at position
+$r+1 \pmod{n}$ and append cities not already present; (3) wrap to fill all
+positions.
+
+The sequential implementation uses an $O(n)$ boolean lookup buffer to test
+membership.  The planned GPU implementation replaces this with a 64-bit
+bitmask held in registers (valid for $n \leq 64$) or shared memory (valid for
+$n \leq 1024$), eliminating branch divergence caused by cache-miss-dependent
+conditional branches in the linear scan.
+
+\warn{OX1 contains data-dependent branching proportional to $n$, which can
+cause warp divergence when different threads reach different branch outcomes at
+the same instruction.  Mitigation: predicated instructions and bitmask
+membership tests that resolve without branching.}
+
+\subsection{Mutation: Swap and Inversion}
+
+Two mutation operators are supported:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Swap}: select two positions $i \neq j$ uniformly at random;
+    exchange $\pi_i \leftrightarrow \pi_j$.  Complexity: $O(1)$.
+  \item \textbf{Inversion (2-opt move)}: select a sub-segment $[\ell, r]$;
+    reverse it in place.  Complexity: $O(n)$.
+\end{itemize}
+
+Each operator is applied independently per individual; there is no
+inter-individual communication, making mutation trivially parallel.
+
+\warn{Mixing operator types within a single kernel launch introduces warp
+divergence if different threads branch to different operators.  Prefer separate
+kernel launches per operator type, or compile a single-operator kernel and
+execute them sequentially on the host.}
+
+\subsection{Elitism}
+
+The top $e$ individuals (by fitness) are copied unchanged into the next
+generation before new offspring are generated.  This prevents fitness
+regression across generations.
+
+For the sequential baseline, elitism is implemented via a partial sort
+(introselect) in $O(N)$ expected time.  On the GPU, a parallel Top-$e$
+selection via bitonic sort on the fitness array is preferred over a full sort
+to minimize kernel occupancy.
+
+% ======================================================================
+\section{Algorithm Statement}
+% ======================================================================
+
+\begin{algorithm}[H]
+\DontPrintSemicolon
+\SetAlgoLined
+\LinesNumbered
+\KwIn{TSP instance $I$ (coordinates, $n$); GA configuration $C$
+      (population size $N$, elite count $e$, tournament size $k$,
+      crossover rate $p_c$, mutation rate $p_m$, maximum generations $G$)}
+\KwOut{Best tour $\pi^*$ found}
+\BlankLine
+$D \gets \textsc{BuildDistanceMatrix}(I)$\;
+$P \gets \textsc{InitializePopulation}(N, n)$\;
+$\textsc{EvaluateFitness}(P,\, D)$\;
+\BlankLine
+\For{$g \gets 1$ \KwTo $G$}{
+  $P' \gets \textsc{ExtractElites}(P,\, e)$\;
+  \While{$|P'| < N$}{
+    $a \gets \textsc{Tournament}(P,\, k)$\;
+    $b \gets \textsc{Tournament}(P,\, k)$\;
+    \eIf{$\textsc{Uniform}(0,1) < p_c$}{
+      $c \gets \textsc{OX1Crossover}(a,\, b)$\;
+    }{
+      $c \gets \textsc{Copy}(a)$\;
+    }
+    \If{$\textsc{Uniform}(0,1) < p_m$}{
+      $\textsc{Mutate}(c)$\;
+    }
+    $\textsc{Append}(P',\, c)$\;
+  }
+  $P \gets P'$\;
+  $\textsc{EvaluateFitness}(P,\, D)$\;
+  $\textsc{LogStatistics}(g,\, P)$\;
+}
+\BlankLine
+\Return $\arg\max_{\pi \in P} f(\pi)$\;
+\caption{Sequential Reference GA for TSP}
+\label{alg:ga}
+\end{algorithm}
+
+% ======================================================================
+\section{Complexity Analysis}
+% ======================================================================
+
+Let $N$ denote population size, $n$ the number of cities, $G$ the number of
+generations, $e$ the elite count, and $k$ the tournament size.
+
+\begin{table}[h]
+\centering
+\caption{Per-generation computational complexity.}
+\label{tab:complexity}
+\renewcommand{\arraystretch}{1.35}
+\begin{tabular}{@{} l l l @{}}
+\toprule
+\textbf{Operation} & \textbf{Sequential} & \textbf{Parallelizable?} \\
+\midrule
+Distance matrix build  & $O(n^2)$ once   & Yes, $O(n)$ with $n$ threads \\
+Fitness evaluation     & $O(Nn)$         & Yes, $O(n)$ with $N$ threads \\
+Tournament selection   & $O(kN)$         & Yes, $O(k)$ with $N$ threads \\
+OX1 crossover          & $O(Nn)$         & Yes, $O(n)$ with $N$ threads \\
+Swap mutation          & $O(N)$          & Yes, $O(1)$ with $N$ threads \\
+Inversion mutation     & $O(Nn)$         & Yes, $O(n)$ with $N$ threads \\
+Elite extraction       & $O(N)$          & Partial (bitonic sort) \\
+\midrule
+\textbf{Total per generation} & $O(GNn)$ & Reduces to $O(Gn)$ on GPU \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The total wall-clock complexity for the sequential implementation is $O(G N n)$.
+A GPU implementation with $N$ threads in parallel reduces the dominant
+evaluation and crossover terms from $O(Nn)$ to $O(n)$ per generation,
+yielding a theoretical $N$-fold speedup on those kernels.
+
+% ======================================================================
+\section{CUDA Readiness Constraints}
+% ======================================================================
+
+The following constraints are enforced in the sequential baseline to ensure
+that GPU porting is an incremental refactor rather than a rewrite.
+
+\begin{enumerate}[label=\textbf{CR-\arabic*.}, leftmargin=*, itemsep=0.5em]
+
+  \item \textbf{Zero global mutable state.}
+    No \texttt{static}, \texttt{extern}, or file-scope mutable variables are
+    used.  All data flows through explicit pointer arguments.  This is a
+    hard requirement because CUDA device functions have no access to host
+    address space.
+
+  \item \textbf{Per-individual RNG state.}
+    Each individual carries its own PRNG state (a \texttt{uint64\_t} for a
+    splitmix64 generator).  On the GPU, this maps directly to a
+    \texttt{curandState} per thread, avoiding the serialization caused by a
+    single shared generator.
+
+  \item \textbf{Batch-oriented evaluation interface.}
+    The evaluation function signature is
+    \texttt{evaluate\_population(Tour*, int N, double* D, int n)}, not a loop
+    over \texttt{evaluate\_tour} calls.  The batch signature mirrors a CUDA
+    kernel launch: the host passes a device pointer and the GPU fills results
+    in parallel.
+
+  \item \textbf{Flat, pointer-based memory.}
+    No nested dynamic allocation (\texttt{Tour**} with per-element
+    \texttt{malloc}).  All population data is held in contiguous flat buffers
+    compatible with \texttt{cudaMalloc} and \texttt{cudaMemcpy}.
+
+  \item \textbf{Deterministic seeding.}
+    A command-line seed fully determines all random choices, enabling exact
+    reproduction of any run.  This is critical for isolating GPU race
+    conditions: compare GPU output against the seeded sequential baseline.
+
+  \item \textbf{SoA migration path documented.}
+    The AoS-to-SoA transformation described in Section~\ref{sec:layout} is
+    the first step of the CUDA port.  No other algorithmic change is required
+    before writing kernel code.
+
+\end{enumerate}
+
+% ======================================================================
+\section{Validation Layer}
+\label{sec:validation}
+% ======================================================================
+
+Correctness of permutation operators is verified by a dedicated validator
+executed after every crossover and mutation in debug builds (\texttt{\#ifdef
+DEBUG}).
+
+\textbf{Permutation check.}  An $O(n)$ pass marks each city encountered in
+the tour; any duplicate or missing index raises an assertion:
+
+\begin{lstlisting}[caption={Tour validation.}]
+bool validate_tour(const Tour *t, int n) {
+    bool seen[n];
+    memset(seen, 0, n * sizeof(bool));
+    for (int k = 0; k < n; k++) {
+        if (t->cities[k] < 0 || t->cities[k] >= n) return false;
+        if (seen[t->cities[k]])                      return false;
+        seen[t->cities[k]] = true;
+    }
+    return true;
+}
+\end{lstlisting}
+
+\textbf{Fitness consistency check.}  After evaluation, $L(\pi)$ is
+independently recomputed and compared against the stored value within a
+relative tolerance of $10^{-9}$.
+
+\textbf{Relevance to GPU debugging.}  The validator provides a ground-truth
+reference against which GPU kernel output can be checked element-wise.
+Memory corruption from out-of-bounds writes in a CUDA kernel typically
+manifests as a permutation invariant violation before causing a numerical
+anomaly, making the validator an early-warning system for kernel bugs.
+
+% ======================================================================
+\section{Summary}
+% ======================================================================
+
+This specification defines a sequential GA for the TSP whose architecture is
+shaped by the eventual requirements of a CUDA implementation.  The key design
+decisions are:
+
+\begin{itemize}[noitemsep]
+  \item \textbf{Stateless functions} to enable direct kernel extraction.
+  \item \textbf{Flat contiguous memory} compatible with device allocation.
+  \item \textbf{Batch evaluation interface} mirroring kernel launch semantics.
+  \item \textbf{Per-individual RNG} ready for \texttt{cuRAND} substitution.
+  \item \textbf{Documented AoS-to-SoA transition} as the primary migration
+    step.
+  \item \textbf{Tournament selection} to avoid global prefix-sum dependencies.
+\end{itemize}
+
+The result is a CPU baseline that can be validated rigorously and then ported
+to GPU by replacing the evaluation and evolution loops with kernel launches ---
+no structural redesign required.
+
+\end{document}
