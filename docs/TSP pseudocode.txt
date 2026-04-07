@@ -1,0 +1,23 @@
+Pseudo Code
+
+Import Graph from TSBLib using parser
+
+Send Graph to GPU (data form either pairs or cities followed by distance), likely available as a texture or constant memory
+
+KERNEL
+
+generate random variations of graph traversal
+OPTIMIZATION: performed only at start of iteration, however important to ensure variations are stored such that following steps will be effecient
+determine 'fitness' i.e. length of each variation 
+OPTIMIZATION: very very very important.  Performed many times in every step, most important run time component
+create new 'genes' by randomly permuting 2 nodes of original variation, generate some number X of offspring that is efficient WRT to threads / memory footprint
+OPTIONAL: permute offspring at a rate that varies with 'temperature' variable
+OPTIMIZATION: performed often, important step
+determine new fitness levels
+OPTIMIZATION: same algorithm can be used, but yes very important
+Discard poor offspring, keep good offspring, perform new generation
+OPTIMIZATION: reduction memory and keeping good offspring is an important concern
+OPTIONAL: reduce temperature
+
+send good offspring out
+

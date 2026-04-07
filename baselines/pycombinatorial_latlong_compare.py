@@ -18,7 +18,13 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
+import matplotlib
+matplotlib.use("Agg")  # non-interactive backend — no display needed
+import matplotlib.pyplot as plt
+import matplotlib.patheffects as pe
 import pandas as pd
+import contextily as ctx
+from pyproj import Transformer
 
 from pyCombinatorial.algorithm import (
     ant_colony_optimization,
@@ -112,6 +118,87 @@ def save_latlong_map(lat_long_df, route, outpath: Path):
     m.save(str(outpath))
 
 
+def save_tour_image(lat_long_df: pd.DataFrame, route: list, outpath: Path, title: str = "TSP Tour") -> None:
+    """
+    Save a static PNG of the tour overlaid on a real OpenStreetMap tile background.
+    lat_long_df has integer column indices: col 0 = Lat, col 1 = Long.
+    route is a list of 1-based city indices (pyCombinatorial convention).
+    """
+    lats = lat_long_df[0].values
+    lons = lat_long_df[1].values
+
+    # pyCombinatorial returns 1-based indices; convert to 0-based
+    route0 = [i - 1 for i in route]
+
+    # Project WGS84 → Web Mercator (EPSG:3857) for contextily
+    transformer = Transformer.from_crs("EPSG:4326", "EPSG:3857", always_xy=True)
+    xs, ys = transformer.transform(lons, lats)
+
+    # ordered tour coordinates (closed loop)
+    tour_idx = route0 + [route0[0]]
+    tour_xs = [xs[i] for i in tour_idx]
+    tour_ys = [ys[i] for i in tour_idx]
+
+    fig, ax = plt.subplots(figsize=(12, 8), dpi=150)
+
+    # --- tour path ---
+    ax.plot(tour_xs, tour_ys,
+            color="#FF4500", linewidth=2.2, zorder=3,
+            solid_capstyle="round", solid_joinstyle="round",
+            label="Tour route",
+            path_effects=[pe.Stroke(linewidth=4, foreground="white", alpha=0.6),
+                          pe.Normal()])
+
+    # --- directional arrows along the route ---
+    for k in range(0, len(tour_xs) - 1, max(1, len(tour_xs) // 12)):
+        dx = tour_xs[k + 1] - tour_xs[k]
+        dy = tour_ys[k + 1] - tour_ys[k]
+        mx, my = (tour_xs[k] + tour_xs[k + 1]) / 2, (tour_ys[k] + tour_ys[k + 1]) / 2
+        ax.annotate("", xy=(mx + dx * 0.01, my + dy * 0.01), xytext=(mx, my),
+                    arrowprops=dict(arrowstyle="-|>", color="#FF4500",
+                                   lw=1.5, mutation_scale=14),
+                    zorder=4)
+
+    # --- all city dots ---
+    ax.scatter(xs, ys, s=70, color="white", edgecolors="#1a1a2e",
+               linewidths=1.2, zorder=5)
+
+    # --- start city ---
+    ax.scatter(xs[route0[0]], ys[route0[0]], s=140, color="#FFD700",
+               edgecolors="#1a1a2e", linewidths=1.5, zorder=6, label="Start city")
+
+    # --- city id labels with white halo for legibility ---
+    for i, (x, y) in enumerate(zip(xs, ys)):
+        ax.annotate(
+            str(i + 1),
+            xy=(x, y), xytext=(5, 5),
+            textcoords="offset points",
+            fontsize=7.5, fontweight="bold", color="#1a1a2e",
+            zorder=7,
+            path_effects=[pe.Stroke(linewidth=2.5, foreground="white"),
+                          pe.Normal()],
+        )
+
+    # --- OpenStreetMap tile background ---
+    ctx.add_basemap(ax, crs="EPSG:3857",
+                    source=ctx.providers.OpenStreetMap.Mapnik,
+                    zoom="auto", alpha=0.85)
+
+    ax.set_axis_off()
+
+    legend = ax.legend(loc="upper right", fontsize=9, framealpha=0.85,
+                       edgecolor="#cccccc", fancybox=True)
+
+    ax.set_title(title, fontsize=13, fontweight="bold", pad=12,
+                 color="#1a1a2e",
+                 path_effects=[pe.Stroke(linewidth=3, foreground="white"),
+                                pe.Normal()])
+
+    plt.tight_layout()
+    plt.savefig(outpath, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+
+
 def save_summary(results_dir: Path, rows: list[dict]) -> Path:
     df = pd.DataFrame(rows)
     outpath = results_dir / "pycombinatorial_madeira_summary.csv"
@@ -134,6 +221,15 @@ def main():
     print("\n=== Running ACO ===")
     aco_route, aco_distance, aco_time, aco_params = run_aco(distance_matrix)
     save_latlong_map(lat_long, aco_route, results_dir / "map_aco.html")
+
+    img_dir = Path("img")
+    img_dir.mkdir(exist_ok=True)
+    save_tour_image(
+        lat_long, aco_route,
+        img_dir / "madeira_aco_tour.png",
+        title=f"Madeira TSP — ACO Tour  (distance = {aco_distance:.2f} km, {len(aco_route)} cities)",
+    )
+    print(f"Saved tour image to: {img_dir / 'madeira_aco_tour.png'}")
 
     print("\n=== Running Hilbert SFC ===")
     sfc_route, sfc_distance, sfc_time, sfc_params = run_hilbert(
