@@ -239,6 +239,12 @@ def main():
     print("\n=== Running GA ===")
     ga_route, ga_distance, ga_time, ga_params = run_ga(distance_matrix)
     save_latlong_map(lat_long, ga_route, results_dir / "map_ga.html")
+    save_tour_image(
+        lat_long, ga_route,
+        img_dir / "madeira_ga_tour.png",
+        title=f"Madeira TSP — GA Tour  (distance = {ga_distance:.2f} km, {len(ga_route)} cities)",
+    )
+    print(f"Saved tour image to: {img_dir / 'madeira_ga_tour.png'}")
 
     summary_rows = [
         {
