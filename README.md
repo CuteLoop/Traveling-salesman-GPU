@@ -221,8 +221,7 @@ python -m pytest tests/test_pycombinatorial_ga.py -v
 | **License** | Open source (GitHub) + NVIDIA AI Enterprise for production support |
 
 **Why it matters for this project:**  
-cuOpt represents the ceiling of GPU-accelerated TSP performance. Our staged implementation (Python → C → naive CUDA → optimized CUDA) builds intuition for exactly the kinds of optimizations — population-based heuristics, GPU-parallel fitness evaluation, memory hierarchy exploitation — that make cuOpt fast at scale.
-
+cuOpt represents the ceiling of GPU-accelerated TSP performance. It would be interesting at the end to compare our algorithm with CuOPT.
 **Links:**
 - [Interactive demo (API Catalog)](https://build.nvidia.com/nvidia/nvidia-cuopt)
 - [Product page](https://www.nvidia.com/en-us/ai-data-science/products/cuopt/)
