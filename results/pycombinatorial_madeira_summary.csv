@@ -1,0 +1,4 @@
+algorithm,distance,runtime_sec,route_length,parameters
+ACO,130.5543615458213,3.5370668999967165,26,"{'ants': 15, 'iterations': 100, 'alpha': 1, 'beta': 2, 'decay': 0.05, 'local_search': True, 'verbose': True}"
+Hilbert_SFC,135.32423526506741,0.07508550002239645,26,"{'local_search': True, 'verbose': True}"
+GA,130.55436154582128,38.06576369999675,26,"{'population_size': 30, 'elite': 1, 'mutation_rate': 0.1, 'mutation_search': 8, 'generations': 300, 'verbose': True}"
