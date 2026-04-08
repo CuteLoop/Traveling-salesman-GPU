@@ -9,6 +9,8 @@
 #include <unordered_map>
 #include <vector>
 
+#include "tsplib_parser.h"
+
 static inline std::string trim(const std::string& s) {
     size_t b = 0, e = s.size();
     while (b < e && std::isspace(static_cast<unsigned char>(s[b]))) ++b;
