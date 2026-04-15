@@ -46,6 +46,8 @@ struct CoordNode {
     double z = 0.0;
 };
 
+constexpr double TSPLIB_PI = 3.14159265358979323846;
+
 static inline std::string trim(const std::string& s) {
     size_t b = 0;
     size_t e = s.size();
@@ -111,7 +113,7 @@ static inline double geo_to_radians(double x) {
     // TSPLIB GEO convention: DDD.MM where MM is minutes
     const int deg = static_cast<int>(x);
     const double min = x - deg;
-    return M_PI * (deg + 5.0 * min / 3.0) / 180.0;
+    return TSPLIB_PI * (deg + 5.0 * min / 3.0) / 180.0;
 }
 
 static inline int dist_euc_2d(const CoordNode& a, const CoordNode& b) {
