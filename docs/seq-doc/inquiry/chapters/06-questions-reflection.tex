@@ -1,0 +1,100 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Questions You Must Answer in Writing}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+Answer these in a \texttt{DESIGN\_NOTES.md} file or as block comments at the top of \texttt{src/instance.c}. These are not optional. The point is to force you to connect the code you wrote to the reasoning behind it.
+
+\begin{enumerate}[label=\textbf{Q\arabic*.}, leftmargin=*, itemsep=6pt]
+  \item Why does \texttt{tsp\_instance\_free} set pointers to \texttt{NULL} after calling \texttt{free}? What specific undefined behaviour does this prevent?
+
+  \item Why is \texttt{tsp\_instance\_init} called at the very beginning of \texttt{tsp\_instance\_load}, before the file is opened?
+
+  \item Why does \texttt{tsp\_build\_distance\_matrix} iterate only for $j > i$ and then assign both \texttt{DIST(inst,i,j)} and \texttt{DIST(inst,j,i)} from the same value, rather than computing all $n^2$ entries independently?
+
+  \item If you had used \texttt{double **dist} instead of \texttt{double *dist}, how many \texttt{free()} calls would \texttt{tsp\_instance\_free} need to make? Write out the loop.
+
+  \item A colleague proposes: ``We should use \texttt{float} for the distance matrix so it fits in GPU constant memory.'' Walk through the arithmetic for $n = 128$ and explain why this argument is not as clean as it sounds.
+
+  \item The \texttt{DIST} macro has parentheses around every argument. Write an example where omitting the parentheses around a single argument would produce a silently wrong result.
+
+  \item At what point in the code does the struct transition from ``partially initialised'' to ``fully valid''? Identify the exact line.
+
+  \item Why does \texttt{tsp\_build\_distance\_matrix} cast to \texttt{(size\_t)} before multiplying \texttt{n * n}? At what value of $n$ would the multiplication overflow a 32-bit signed integer?
+\end{enumerate}
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Implementation Order Summary}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+Follow this order. Do not skip steps.
+
+\begin{enumerate}[label=\textbf{Step \arabic*.}, leftmargin=*, itemsep=4pt]
+  \item Write \texttt{include/instance.h}: struct, macro, declarations.
+  \item Write \texttt{src/instance.c}: \texttt{tsp\_instance\_init} (static), \texttt{tsp\_instance\_free}.
+  \item Compile with an empty \texttt{main}. Fix all warnings before proceeding.
+  \item Write \texttt{tsp\_instance\_load}: open, scan headers, parse \texttt{DIMENSION}, allocate, find \texttt{NODE\_COORD\_SECTION}, parse coordinates.
+  \item Create the test fixtures.
+  \item Write \texttt{tests/test\_instance.c}: \texttt{test\_load\_square} only.
+  \item Compile and run. Fix failures.
+  \item Write \texttt{tsp\_build\_distance\_matrix}.
+  \item Add matrix tests (D-01 through D-04). Fix failures.
+  \item Add failure-mode tests (F-01, F-02). Fix failures.
+  \item Run under Valgrind. Fix all leaks before proceeding.
+  \item Write your design notes answering Q1--Q8.
+\end{enumerate}
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Reflection: After Everything Passes}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+Once Valgrind is clean and all tests pass, answer these reflection questions. These bridge Phase 1 to the GPU work ahead.
+
+\begin{enumerate}[label=\arabic*., itemsep=6pt]
+  \item If the instance size grew to 5000 cities, the full matrix would be $5000^2 \times 8 = 200$\,MB. What options would you have? Name at least two distinct strategies.
+
+  \item GPU global memory is large but has high latency. GPU shared memory is fast but limited ($\approx$48\,KB per thread block on modern hardware). When the GA kernel accesses the distance matrix, what access pattern determines whether shared memory can help?
+
+  \item Your current parser is strict: it only handles one file format subset. If you later need to support TSPLIB files with explicit edge weight matrices (\texttt{EDGE\_WEIGHT\_SECTION}), what part of \texttt{tsp\_instance\_load} would change? What part would stay the same?
+
+  \item \texttt{tsp\_build\_distance\_matrix} and \texttt{tsp\_instance\_load} are currently separate functions. Describe one scenario where that separation would make your Phase 2 implementation significantly easier.
+
+  \item Write one sentence describing why \texttt{free(NULL)} being a no-op is a deliberate design decision in the C standard, not an accident.
+\end{enumerate}
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Optional Extensions}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+Do these only after all tests pass and the design notes are written.
+
+\subsection*{Extension A: Packed symmetric storage}
+Store only entries with $i < j$. The index formula for $(i < j)$ in a packed array is:
+\[
+\text{idx}(i,j) = i \cdot n - \frac{i(i+1)}{2} + j - i - 1
+\]
+\begin{itemize}
+  \item Implement a \texttt{DIST\_PACKED} macro that handles both $i < j$ and $i > j$.
+  \item Rerun all tests. Do any break?
+  \item Measure: how much less memory is used for $n = 512$?
+\end{itemize}
+
+\subsection*{Extension B: \texttt{float} distance matrix}
+Switch \texttt{dist} from \texttt{double} to \texttt{float}. Use \texttt{sqrtf} instead of \texttt{sqrt}.
+\begin{itemize}
+  \item Adjust test tolerances where needed.
+  \item For $n = 128$, compare matrix footprint against constant-memory budget.
+  \item Answer: does this change improve anything measurable on CPU?
+\end{itemize}
+
+\subsection*{Extension C: Command-line loader}
+Write a small \texttt{src/main.c} that accepts a \texttt{.tsp} file as a command-line argument, loads it, builds the matrix, and prints the matrix dimensions and the distance from city 0 to city 1.
+
+\begin{lstlisting}[style=shellstyle]
+./tsp_info tests/fixtures/square_4.tsp
+# Loaded 4 cities.
+# dist(0,1) = 1.000000
+\end{lstlisting}

@@ -10,9 +10,9 @@ The project follows a structured progression: **Python baseline → sequential C
 | Stage | Status | Description |
 |-------|--------|-------------|
 | **1. Python baseline** | ✅ Done | pyCombinatorial (GA, ACO, Hilbert SFC) — correctness reference |
-| **2. Sequential C** | 🔲 Next | Single-threaded C implementation of the GA |
-| **3. Naive GPU (CUDA)** | 🔲 Planned | Port fitness evaluation to GPU, no memory optimizations |
-| **4. Optimized GPU (CUDA)** | 🔲 Planned | Shared memory, coalesced access, warp-level primitives |
+| **2. Sequential C** | ✅ Done | Single-threaded C99 GA with tests, regression checks, and benchmarking |
+| **3. Naive GPU (CUDA)** | ✅ Done | CUDA baseline (`GPU-Naive.cu`) for parallel tour-length evaluation |
+| **4. GPU GA variants (CUDA)** | ✅ In Progress | Hybrid host+GPU GA (`CUDA-GA.cu`) and GPU island model (`CUDA-GA-GPU-Pop.cu`) |
 
 The Python baseline is the ground truth. Every subsequent implementation must produce tours within an acceptable tolerance of the Python results before moving forward.
 
@@ -43,9 +43,14 @@ The Python baseline is the ground truth. Every subsequent implementation must pr
 │   ├── ga_runner.py                  # Core helpers: load data, build matrix, run GA
 │   ├── py_combinatorial_ga_example_berlin52.py
 │   └── pycombinatorial_latlong_compare.py   # ACO / GA / Hilbert SFC on Madeira dataset
-├── approaches/                       # C and CUDA implementations (WIP)
+├── sequential/                       # Sequential C99 GA implementation
+├── GPU-Naive.cu                      # Naive CUDA tour-length evaluation
+├── CUDA-GA.cu                        # Hybrid GA: CPU evolution + GPU fitness
+├── CUDA-GA-GPU-Pop.cu                # GPU island-model GA
+├── tsplib_parser.cpp/.h              # TSPLIB parser used by C/CUDA executables
 ├── tests/                            # Pytest test suite
 │   └── test_pycombinatorial_ga.py
+├── docs/                             # Technical notes and CUDA implementation docs
 ├── results/                          # Output CSVs and HTML maps (git-ignored)
 ├── img/
 │   └── flow-chart.png
@@ -199,26 +204,229 @@ python -m pytest tests/test_pycombinatorial_ga.py -v
 
 ---
 
-## 7. Next Steps
+## 7. Run the Sequential C Version
 
-**Stage 2 — Sequential C implementation**
-- Re-implement the GA (`initialize`, `evaluate`, `select`, `crossover`, `mutate`) in C
-- Validate: tour distance must match Python baseline within ±0.1%
-- Measure: establish single-thread CPU runtime as baseline for GPU speedup calculations
+The sequential implementation lives under `sequential/` and builds via `Makefile`.
 
-**Stage 3 — Naive GPU (CUDA)**
-- Parallelize fitness evaluation across threads (one thread per candidate tour)
-- No memory hierarchy optimizations yet
-- Target: correct results, measure raw GPU vs CPU speedup
+### 7.1 Build
 
-**Stage 4 — Optimized GPU (CUDA)**
-- Shared memory for distance matrix tiles
-- Coalesced global memory access
-- Warp-level reduction for fitness aggregation
+```bash
+cd sequential
+make clean
+make all
+```
+
+### 7.2 Run tests
+
+```bash
+make test
+```
+
+### 7.3 Run GA executable
+
+Linux/macOS:
+
+```bash
+./bin/ga-tsp --instance tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv results.csv
+```
+
+Windows PowerShell:
+
+```powershell
+.\bin\ga-tsp.exe --instance tests\fixtures\smoke_20.tsp --pop 100 --gen 200 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv results.csv
+```
+
+Optional executables:
+
+- `bin/skeleton` or `bin/skeleton.exe`
+- `bin/stress_crossover` or `bin/stress_crossover.exe`
+- `bin/stress_mutation` or `bin/stress_mutation.exe`
+
+## 8. Run the CUDA Versions
+
+Prerequisites:
+
+- NVIDIA GPU + driver
+- CUDA Toolkit with `nvcc` in PATH
+
+From repository root, compile each executable by linking its `.cu` file with `tsplib_parser.cpp`.
+
+### 8.1 Build CUDA executables
+
+Linux/macOS:
+
+```bash
+nvcc -O2 -std=c++17 -arch=sm_60 -o GPU-Naive GPU-Naive.cu tsplib_parser.cpp
+nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA CUDA-GA.cu tsplib_parser.cpp
+nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA-GPU-Pop CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+```
+
+Windows PowerShell:
+
+```powershell
+nvcc -O2 -std=c++17 -arch=sm_60 -o GPU-Naive.exe GPU-Naive.cu tsplib_parser.cpp
+nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA.exe CUDA-GA.cu tsplib_parser.cpp
+nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA-GPU-Pop.exe CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+```
+
+If your GPU is not Pascal/P100, adjust `-arch=sm_60` to your compute capability.
+
+### 8.2 Run GPU-Naive
+
+Linux/macOS:
+
+```bash
+./GPU-Naive sequential/tests/fixtures/smoke_20.tsp
+```
+
+Windows PowerShell:
+
+```powershell
+.\GPU-Naive.exe sequential\tests\fixtures\smoke_20.tsp
+```
+
+### 8.3 Run CUDA-GA (hybrid)
+
+Usage:
+
+```text
+CUDA-GA <file.tsp> [population=512] [generations=1000] [mutation_rate=0.05] [elite_count=4] [seed=auto]
+```
+
+Example:
+
+```bash
+./CUDA-GA sequential/tests/fixtures/smoke_20.tsp 512 1000 0.05 4 42
+```
+
+### 8.4 Run CUDA-GA-GPU-Pop (island model)
+
+Usage:
+
+```text
+CUDA-GA-GPU-Pop <file.tsp> [islands=128] [generations=1000] [mutation_rate=0.05] [elite_count=2] [seed=auto]
+```
+
+Example:
+
+```bash
+./CUDA-GA-GPU-Pop sequential/tests/fixtures/smoke_20.tsp 128 1000 0.05 2 42
+```
+
+Note: this version currently enforces `MAX_CITIES=128`.
+
+## 9. Compare Python Baseline vs Sequential C (Same Instance)
+
+### 9.0 Recommended Run Profiles
+
+Use these two profiles depending on what you want to measure:
+
+1. Normal run (similar parameters, fast): same high-level GA knobs for Python and C (`pop=100`, `gen=200`, `mutation=0.1`, `elite=2`).
+2. Budgeted C run (~1/10 Python time): keep C settings fixed except increase generations to consume about one-tenth of Python runtime.
+
+Normal fast comparison command:
+
+```bash
+python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
+```
+
+Budgeted C-only run command (targeting ~1/10 of Python runtime observed on this machine):
+
+```powershell
+.\sequential\bin\ga-tsp.exe --instance .\sequential\tests\fixtures\smoke_20.tsp --pop 100 --gen 150000 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv .\sequential\results_budget_1tenth.csv
+```
+
+Why this split is useful:
+
+- Normal run gives quick apples-to-apples comparison for iteration/testing.
+- Budgeted run gives C more search time while still bounded by a reproducible time budget.
+
+Use this script to run both implementations on the same TSPLIB coordinate file, measure runtime, and compare route/distance:
+
+`baselines/compare_python_vs_sequential_ga.py`
+
+From repository root:
+
+```bash
+python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
+```
+
+What it does:
+
+- Runs pyCombinatorial GA on the parsed TSPLIB coordinates.
+- Builds and runs `sequential/bin/ga-tsp` (or `.exe` on Windows) with matching parameters.
+- Captures elapsed time for both.
+- Compares tours in a cycle-invariant way (rotation/reversal equivalent).
+- Saves full details to `results/python_vs_sequential_compare.txt`.
+
+Tip: add `--no-release-build` if you do not want the script to force `BUILD=release` for the sequential binary.
+
+### 9.1 Latest Measured Results (`smoke_20.tsp`)
+
+Comparison command used:
+
+```bash
+python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
+```
+
+| Implementation | Distance | Runtime (s) | Tour length (cities) | Equivalent tour (rotation/reversal) |
+|---|---:|---:|---:|---|
+| Python baseline (pyCombinatorial) | 75.776906 | 41.956912 | 20 | False |
+| Sequential C (`ga-tsp`) | 77.492495 | 0.055615 | 20 | False |
+
+Tour order (Python baseline):
+
+```text
+13 -> 12 -> 1 -> 8 -> 18 -> 4 -> 17 -> 2 -> 3 -> 16 -> 19 -> 10 -> 9 -> 11 -> 5 -> 20 -> 6 -> 7 -> 15 -> 14 -> 13
+```
+
+Tour order (Sequential C):
+
+```text
+9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9
+```
+
+Outputs saved by the script:
+
+- `results/python_vs_sequential_compare.csv`
+- `results/python_vs_sequential_compare.txt`
+
+### 9.2 Longer Sequential Budgeted Run (~1/10 Python runtime)
+
+Sequential command used:
+
+```powershell
+.\sequential\bin\ga-tsp.exe --instance .\sequential\tests\fixtures\smoke_20.tsp --pop 100 --gen 150000 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv .\sequential\results_budget_1tenth.csv
+```
+
+Measured runtime: `4.0735 s` (target budget was `~4.1957 s`).
+
+Result summary:
+
+- Best distance: `77.073275`
+- Tour length: `20`
+- Tour order:
+
+```text
+10 -> 4 -> 14 -> 13 -> 12 -> 11 -> 0 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 15 -> 18 -> 9 -> 6 -> 5 -> 19 -> 8 -> 10
+```
+
+Output CSV:
+
+- `sequential/results_budget_1tenth.csv`
+
+## 10. Next Steps
+
+**Current focus areas**
+- Benchmark sequential vs all CUDA executables on the same TSPLIB instances and parameter sets.
+- Add a shared build script/Makefile for CUDA targets to avoid manual `nvcc` commands.
+- Extend GPU-population GA beyond `MAX_CITIES=128` (current constant-memory constraint).
+- Add island migration and more advanced in-kernel selection/sorting strategies.
+- Record reproducible experiment runs (instance, seed, config, runtime, best tour length) in `results/`.
 
 ---
 
-## 8. Reference — NVIDIA cuOpt
+## 11. Reference — NVIDIA cuOpt
 
 > [NVIDIA cuOpt](https://build.nvidia.com/nvidia/nvidia-cuopt) is NVIDIA's production-grade, GPU-accelerated decision optimization engine. It is the state-of-the-art reference for what fully optimized GPU-based TSP/VRP solving looks like.
 

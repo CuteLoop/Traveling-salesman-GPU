@@ -1,0 +1,387 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{The TSPLIB File Format (Narrow Subset)}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+You will support one strict subset of TSPLIB. Not all variants. This is intentional: a parser that handles one format correctly is better than a parser that handles ten formats inconsistently.
+
+\subsection{Format you will support}
+
+\begin{lstlisting}[style=cstyle, language={}, numbers=none]
+NAME: square_4
+TYPE: TSP
+COMMENT: 4-city unit square
+DIMENSION: 4
+EDGE_WEIGHT_TYPE: EUC_2D
+NODE_COORD_SECTION
+1 0.0 0.0
+2 1.0 0.0
+3 1.0 1.0
+4 0.0 1.0
+EOF
+\end{lstlisting}
+
+\textbf{Rules your parser enforces:}
+\begin{itemize}
+  \item Header fields may appear in any order before \texttt{NODE\_COORD\_SECTION}.
+  \item \texttt{DIMENSION} must appear and must be a positive integer.
+  \item \texttt{NODE\_COORD\_SECTION} must appear.
+  \item After \texttt{NODE\_COORD\_SECTION}, each line must parse as \texttt{int double double} (id, x, y).
+  \item The parser reads exactly \texttt{DIMENSION} coordinate lines.
+  \item \texttt{EOF} at end is optional; the parser stops when it has read all $n$ cities.
+\end{itemize}
+
+\textbf{What you do NOT need to handle (yet):}
+\begin{itemize}
+  \item \texttt{EDGE\_WEIGHT\_SECTION} (explicit weight matrices)
+  \item \texttt{DISPLAY\_DATA\_SECTION}
+  \item \texttt{EDGE\_WEIGHT\_TYPE} values other than \texttt{EUC\_2D}
+  \item 3D coordinates
+\end{itemize}
+
+\subsection{Test fixture: \texttt{square\_4.tsp}}
+
+Create this file exactly. You will use it to verify every geometric invariant.
+
+\begin{lstlisting}[style=cstyle, language={}, numbers=none]
+NAME: square_4
+TYPE: TSP
+DIMENSION: 4
+EDGE_WEIGHT_TYPE: EUC_2D
+NODE_COORD_SECTION
+1 0.0 0.0
+2 1.0 0.0
+3 1.0 1.0
+4 0.0 1.0
+EOF
+\end{lstlisting}
+
+Cities 0--3 (0-indexed after loading) form a unit square. The expected distance matrix is:
+
+\[
+D = \begin{pmatrix}
+0 & 1 & \sqrt{2} & 1 \\
+1 & 0 & 1 & \sqrt{2} \\
+\sqrt{2} & 1 & 0 & 1 \\
+1 & \sqrt{2} & 1 & 0
+\end{pmatrix}
+\]
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{C Implementation Guide}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+This section gives you enough C scaffolding that you can implement each function without guessing syntax, while still writing the logic yourself.
+
+\subsection{Step 1: Struct, macro, and static initialiser}
+
+In \texttt{include/instance.h}, place the struct and macro as shown in Section~6.
+
+In \texttt{src/instance.c}, write a static helper to initialise a struct to the safe zero state:
+
+\begin{lstlisting}[style=cstyle]
+#include "instance.h"
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <math.h>
+
+/* Zero-initialise: all pointers NULL, n = 0.
+ * After this call, tsp_instance_free(inst) is always safe. */
+static void tsp_instance_init(TSPInstance *inst)
+{
+    inst->n        = 0;
+    inst->coords_x = NULL;
+    inst->coords_y = NULL;
+    inst->dist     = NULL;
+}
+\end{lstlisting}
+
+Write this first. Every other function depends on this invariant.
+
+\subsection{Step 2: Implement \texttt{tsp\_instance\_free}}
+
+Before writing the parser, write cleanup. The reason is: every early-return error path in the parser will call \texttt{tsp\_instance\_free}. If cleanup is buggy, your error paths are buggy.
+
+Pattern to follow:
+
+\begin{lstlisting}[style=cstyle]
+void tsp_instance_free(TSPInstance *inst)
+{
+    if (inst == NULL) return;
+    free(inst->coords_x);  inst->coords_x = NULL;
+    free(inst->coords_y);  inst->coords_y = NULL;
+    free(inst->dist);      inst->dist     = NULL;
+    inst->n = 0;
+}
+\end{lstlisting}
+
+\begin{inquiry}{Why is \texttt{free(NULL)} safe?}
+The C standard (C99 \S7.20.3.2) guarantees that \texttt{free(NULL)} has no effect. This means you never need to check for \texttt{NULL} before calling \texttt{free}. But you \emph{do} need to set pointers to \texttt{NULL} after freeing them, to prevent accidental double-free.
+\end{inquiry}
+
+\subsection{Step 3: Skeleton of \texttt{tsp\_instance\_load}}
+
+\begin{lstlisting}[style=cstyle]
+int tsp_instance_load(const char *path, TSPInstance *out)
+{
+    tsp_instance_init(out);   /* safe even if we return -1 early */
+
+    FILE *fp = fopen(path, "r");
+    if (fp == NULL) return -1;
+
+    char line[512];
+    int  dimension_found = 0;
+    int  n = 0;
+
+    /* ── Pass 1: scan headers for DIMENSION ─────────────────────── */
+    /* YOUR CODE: loop with fgets, look for "DIMENSION" keyword,
+       parse the integer, set dimension_found = 1 when found.
+       Stop when you hit NODE_COORD_SECTION or EOF.               */
+
+    if (!dimension_found) { fclose(fp); return -1; }
+
+    /* ── Allocate coordinate arrays ──────────────────────────────── */
+    out->coords_x = malloc(n * sizeof(double));
+    out->coords_y = malloc(n * sizeof(double));
+    if (!out->coords_x || !out->coords_y) {
+        fclose(fp);
+        tsp_instance_free(out);  /* free whatever was allocated */
+        return -1;
+    }
+
+    /* ── Find NODE_COORD_SECTION ─────────────────────────────────── */
+    /* YOUR CODE: continue scanning lines until NODE_COORD_SECTION.
+       If not found before EOF, call tsp_instance_free and return -1. */
+
+    /* ── Parse coordinate lines ──────────────────────────────────── */
+    for (int k = 0; k < n; k++) {
+        if (fgets(line, sizeof(line), fp) == NULL) {
+            fclose(fp); tsp_instance_free(out); return -1;
+        }
+        int   id;
+        double x, y;
+        /* YOUR CODE: sscanf the line. Check return value == 3.
+           Store: out->coords_x[id-1] = x; out->coords_y[id-1] = y;
+           If sscanf fails, call tsp_instance_free and return -1.   */
+    }
+
+    fclose(fp);
+    out->n = n;
+    return 0;
+}
+\end{lstlisting}
+
+\subsection{Step 4: Implement \texttt{tsp\_build\_distance\_matrix}}
+
+\begin{lstlisting}[style=cstyle]
+int tsp_build_distance_matrix(TSPInstance *inst)
+{
+    int n = inst->n;
+    inst->dist = malloc((size_t)n * n * sizeof(double));
+    if (inst->dist == NULL) return -1;
+
+    for (int i = 0; i < n; i++) {
+        DIST(inst, i, i) = 0.0;
+        for (int j = i + 1; j < n; j++) {
+            double dx = inst->coords_x[i] - inst->coords_x[j];
+            double dy = inst->coords_y[i] - inst->coords_y[j];
+            double d  = sqrt(dx*dx + dy*dy);
+            DIST(inst, i, j) = d;
+            DIST(inst, j, i) = d;
+        }
+    }
+    return 0;
+}
+\end{lstlisting}
+
+Note: \texttt{(size\_t)n * n} is important. If \texttt{n} is large enough that \texttt{n*n} overflows a 32-bit \texttt{int}, the multiplication is done as \texttt{int} and wraps before the cast. Casting one operand to \texttt{size\_t} first forces the multiplication to happen in 64-bit.
+
+\subsection{Step 5: The Makefile}
+
+\begin{lstlisting}[style=cstyle, language=make]
+CC      = gcc
+CFLAGS  = -Wall -Wextra -Werror -std=c11 -Iinclude
+LDFLAGS = -lm
+
+all: test_instance
+
+test_instance: src/instance.c tests/test_instance.c
+	$(CC) $(CFLAGS) $^ $(LDFLAGS) -o $@
+
+clean:
+	rm -f test_instance
+
+.PHONY: all clean
+\end{lstlisting}
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Testing: Writing Plain-C Unit Tests}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+You are not using a test framework. You are writing a test runner in plain C. Here is the minimal pattern:
+
+\begin{lstlisting}[style=cstyle]
+/* tests/test_instance.c */
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include "instance.h"
+
+/* ── Test helpers ──────────────────────────────────────────────────────────── */
+static int tests_run    = 0;
+static int tests_passed = 0;
+
+#define CHECK(condition, msg)                                       \
+    do {                                                            \
+        tests_run++;                                                \
+        if (condition) {                                            \
+            tests_passed++;                                         \
+        } else {                                                    \
+            fprintf(stderr, "FAIL [%s:%d] %s\n",                   \
+                    __FILE__, __LINE__, msg);                       \
+        }                                                           \
+    } while (0)
+
+#define CHECK_NEAR(a, b, tol, msg)  CHECK(fabs((a)-(b)) < (tol), msg)
+
+/* ── Tests ─────────────────────────────────────────────────────────────────── */
+
+static void test_load_square(void)
+{
+    TSPInstance inst;
+    int rc = tsp_instance_load("tests/fixtures/square_4.tsp", &inst);
+
+    CHECK(rc == 0,        "P-01: load returns 0 on success");
+    CHECK(inst.n == 4,    "P-02: city count is 4");
+
+    if (rc != 0) { tsp_instance_free(&inst); return; }
+
+    /* P-03: spot-check one coordinate */
+    CHECK_NEAR(inst.coords_x[0], 0.0, 1e-9, "P-03: city 0 x == 0.0");
+    CHECK_NEAR(inst.coords_y[0], 0.0, 1e-9, "P-03: city 0 y == 0.0");
+
+    int mrc = tsp_build_distance_matrix(&inst);
+    CHECK(mrc == 0, "matrix build returns 0");
+
+    /* D-01: diagonal is zero */
+    for (int i = 0; i < inst.n; i++)
+        CHECK(DIST(&inst, i, i) == 0.0, "D-01: diagonal is zero");
+
+    /* D-02: symmetry */
+    for (int i = 0; i < inst.n; i++)
+        for (int j = 0; j < inst.n; j++)
+            CHECK_NEAR(DIST(&inst, i, j), DIST(&inst, j, i), 1e-12, "D-02: symmetric");
+
+    /* D-03: adjacent sides == 1 */
+    CHECK_NEAR(DIST(&inst, 0, 1), 1.0, 1e-9, "D-03: dist(0,1)==1");
+    CHECK_NEAR(DIST(&inst, 1, 2), 1.0, 1e-9, "D-03: dist(1,2)==1");
+
+    /* D-04: diagonal == sqrt(2) */
+    CHECK_NEAR(DIST(&inst, 0, 2), sqrt(2.0), 1e-9, "D-04: dist(0,2)==sqrt(2)");
+    CHECK_NEAR(DIST(&inst, 1, 3), sqrt(2.0), 1e-9, "D-04: dist(1,3)==sqrt(2)");
+
+    tsp_instance_free(&inst);
+    /* M-01: after free, pointers are NULL */
+    CHECK(inst.coords_x == NULL, "M-01: coords_x NULL after free");
+    CHECK(inst.dist      == NULL, "M-01: dist NULL after free");
+}
+
+static void test_malformed_bad_coord(void)
+{
+    TSPInstance inst;
+    int rc = tsp_instance_load("tests/fixtures/malformed_bad_coord.tsp", &inst);
+    CHECK(rc == -1, "F-01: malformed coord returns -1");
+    /* Must be safe to free even after failure */
+    tsp_instance_free(&inst);
+    CHECK(inst.n == 0, "F-01: n is 0 after failed load + free");
+}
+
+static void test_missing_section(void)
+{
+    TSPInstance inst;
+    int rc = tsp_instance_load("tests/fixtures/malformed_missing_section.tsp", &inst);
+    CHECK(rc == -1, "F-02: missing section returns -1");
+    tsp_instance_free(&inst);
+}
+
+/* ── Main ───────────────────────────────────────────────────────────────────── */
+int main(void)
+{
+    test_load_square();
+    test_malformed_bad_coord();
+    test_missing_section();
+
+    printf("\nResults: %d/%d tests passed\n", tests_passed, tests_run);
+    return (tests_passed == tests_run) ? 0 : 1;
+}
+\end{lstlisting}
+
+\subsection{Malformed fixture files}
+
+\textbf{\texttt{malformed\_bad\_coord.tsp}:}
+\begin{lstlisting}[style=cstyle, language={}, numbers=none]
+NAME: bad_coord
+DIMENSION: 2
+NODE_COORD_SECTION
+1 0.0 0.0
+2 NOTANUMBER 1.0
+EOF
+\end{lstlisting}
+
+\textbf{\texttt{malformed\_missing\_section.tsp}:}
+\begin{lstlisting}[style=cstyle, language={}, numbers=none]
+NAME: missing_section
+DIMENSION: 2
+EOF
+\end{lstlisting}
+
+\subsection{Running under Valgrind}
+
+\begin{lstlisting}[style=shellstyle]
+make
+valgrind --leak-check=full --error-exitcode=1 ./test_instance
+\end{lstlisting}
+
+Valgrind should report:
+\begin{lstlisting}[style=shellstyle]
+==PID== HEAP SUMMARY:
+==PID==     in use at exit: 0 bytes in 0 blocks
+==PID==  LEAK SUMMARY:
+==PID==     definitely lost: 0 bytes in 0 blocks
+\end{lstlisting}
+
+If you see leaks, trace them by adding \texttt{--track-origins=yes}.
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Test Matrix: What You Are Verifying}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+\begin{center}
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{llX}
+\toprule
+\textbf{ID} & \textbf{Category} & \textbf{What it checks} \\
+\midrule
+P-01 & Parsing & \texttt{tsp\_instance\_load} returns 0 on a valid file \\
+P-02 & Parsing & Loaded city count matches \texttt{DIMENSION} \\
+P-03 & Parsing & At least one coordinate value matches expected \\
+D-01 & Matrix  & \texttt{DIST(inst, i, i) == 0.0} for all $i$ \\
+D-02 & Matrix  & \texttt{DIST(inst, i, j) == DIST(inst, j, i)} for all $i, j$ \\
+D-03 & Matrix  & Adjacent square sides equal 1.0 within tolerance \\
+D-04 & Matrix  & Square diagonals equal $\sqrt{2}$ within tolerance \\
+F-01 & Failure & Malformed coordinate line returns -1 \\
+F-02 & Failure & Missing \texttt{NODE\_COORD\_SECTION} returns -1 \\
+M-01 & Memory  & All pointers are \texttt{NULL} after \texttt{tsp\_instance\_free} \\
+M-02 & Memory  & Valgrind reports zero leaked bytes on success path \\
+M-03 & Memory  & Valgrind reports zero leaked bytes on failure path \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\newpage

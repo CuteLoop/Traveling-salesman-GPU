@@ -1,0 +1,168 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{The Complete API Specification}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+This section gives you complete function contracts. A \emph{contract} specifies: what you must provide (preconditions), what the function guarantees when it returns (postconditions), and what it guarantees on both success and failure paths.
+
+\subsection{The data structure (\texttt{include/instance.h})}
+
+\begin{lstlisting}[style=cstyle]
+#ifndef TSP_INSTANCE_H
+#define TSP_INSTANCE_H
+
+/* ── TSPInstance ────────────────────────────────────────────────────────────
+ *
+ *  Holds a single TSP instance loaded from a TSPLIB coordinate file.
+ *
+ *  Fields:
+ *    n         Number of cities. Always >= 1 when the struct is valid.
+ *              Zero indicates an uninitialized or freed struct.
+ *
+ *    coords_x  Pointer to an array of n x-coordinates, allocated on the heap.
+ *              coords_x[i] is the x-coordinate of city i (0-indexed).
+ *              NULL if not yet allocated.
+ *
+ *    coords_y  Pointer to an array of n y-coordinates, allocated on the heap.
+ *              coords_y[i] is the y-coordinate of city i (0-indexed).
+ *              NULL if not yet allocated.
+ *
+ *    dist      Pointer to a flat row-major n*n distance matrix, heap-allocated.
+ *              dist[i*n + j] is the Euclidean distance from city i to city j.
+ *              NULL if not yet built.
+ *
+ *  Invariants (when valid):
+ *    dist[i*n + i] == 0.0          for all i
+ *    dist[i*n + j] == dist[j*n+i]  for all i, j  (symmetry)
+ *    dist[i*n + j] >= 0.0          for all i, j
+ *
+ *  Ownership:
+ *    The struct owns all three pointers. tsp_instance_free() must be called
+ *    exactly once on any struct touched by tsp_instance_load(), whether or
+ *    not the load succeeded.
+ * ─────────────────────────────────────────────────────────────────────────── */
+typedef struct {
+    int     n;
+    double *coords_x;
+    double *coords_y;
+    double *dist;
+} TSPInstance;
+
+/* Access macro. i and j must be in [0, inst->n). */
+#define DIST(inst, i, j)  ((inst)->dist[(i) * (inst)->n + (j)])
+
+/* ── Function declarations ───────────────────────────────────────────────── */
+
+int  tsp_instance_load(const char *path, TSPInstance *out);
+void tsp_instance_free(TSPInstance *inst);
+int  tsp_build_distance_matrix(TSPInstance *inst);
+
+#endif /* TSP_INSTANCE_H */
+\end{lstlisting}
+
+\newpage
+
+\begin{apispec}{tsp\_instance\_load}
+
+\textbf{Signature:}
+\begin{lstlisting}[style=cstyle, numbers=none]
+int tsp_instance_load(const char *path, TSPInstance *out);
+\end{lstlisting}
+
+\textbf{Arguments:}
+\begin{itemize}
+  \item \texttt{path} --- A null-terminated C string giving the file system path to a TSPLIB-format \texttt{.tsp} file. Must not be \texttt{NULL}.
+  \item \texttt{out} --- Pointer to a \texttt{TSPInstance} that the caller provides. The function writes the loaded instance into this struct. Must not be \texttt{NULL}. The struct's contents before the call are ignored; the function overwrites them.
+\end{itemize}
+
+\textbf{Returns:}
+\begin{itemize}
+  \item \texttt{0} on success. \texttt{out} is fully populated: \texttt{n} $\geq$ 1, \texttt{coords\_x} and \texttt{coords\_y} are heap-allocated arrays of length \texttt{n}, \texttt{dist} is \texttt{NULL} (matrix is not built by this function).
+  \item \texttt{-1} on any failure. Failure conditions include: file not found, file is empty, \texttt{NODE\_COORD\_SECTION} is missing, any coordinate line is malformed, any allocation fails. On failure, \texttt{out} is left in a state that is safe to pass to \texttt{tsp\_instance\_free()}: all pointers it owns are either valid or \texttt{NULL}.
+\end{itemize}
+
+\textbf{What it does (step by step):}
+\begin{enumerate}[label=\arabic*.]
+  \item Initialise \texttt{*out} to the zero struct (\texttt{n=0}, all pointers \texttt{NULL}). This ensures \texttt{free} is safe even if we return early.
+  \item Open the file at \texttt{path}. Return \texttt{-1} if it cannot be opened.
+  \item Scan lines until \texttt{DIMENSION: N} (or \texttt{DIMENSION : N}) is found. Parse $N$ as the city count. Return \texttt{-1} if not found before \texttt{NODE\_COORD\_SECTION} or EOF.
+  \item Allocate \texttt{coords\_x[N]} and \texttt{coords\_y[N]}. Return \texttt{-1} if either allocation fails.
+  \item Scan lines until \texttt{NODE\_COORD\_SECTION} is found. Return \texttt{-1} if not found.
+  \item For each of the next $N$ lines, parse with \texttt{sscanf(line, "\%d \%lf \%lf", \&id, \&x, \&y)}. If any line does not produce exactly 3 fields, return \texttt{-1}.
+  \item Store \texttt{x} in \texttt{coords\_x[id-1]} and \texttt{y} in \texttt{coords\_y[id-1]}. (TSPLIB IDs are 1-indexed; convert to 0-indexed.)
+  \item Close the file. Set \texttt{out->n = N}. Return \texttt{0}.
+\end{enumerate}
+
+\textbf{What it does NOT do:}
+\begin{itemize}
+  \item It does \emph{not} build the distance matrix. Call \texttt{tsp\_build\_distance\_matrix} separately.
+  \item It does \emph{not} validate that city IDs form a contiguous sequence starting at 1.
+\end{itemize}
+
+\end{apispec}
+
+\vspace{8pt}
+
+\begin{apispec}{tsp\_instance\_free}
+
+\textbf{Signature:}
+\begin{lstlisting}[style=cstyle, numbers=none]
+void tsp_instance_free(TSPInstance *inst);
+\end{lstlisting}
+
+\textbf{Arguments:}
+\begin{itemize}
+  \item \texttt{inst} --- Pointer to a \texttt{TSPInstance}. May be \texttt{NULL} (the function is a no-op in that case). The struct it points to may be partially initialised (some pointers non-\texttt{NULL}, others \texttt{NULL}).
+\end{itemize}
+
+\textbf{Returns:} Nothing.
+
+\textbf{What it does:}
+\begin{enumerate}[label=\arabic*.]
+  \item If \texttt{inst} is \texttt{NULL}, return immediately.
+  \item Call \texttt{free(inst->coords\_x)} if it is not \texttt{NULL}. Set to \texttt{NULL}.
+  \item Call \texttt{free(inst->coords\_y)} if it is not \texttt{NULL}. Set to \texttt{NULL}.
+  \item Call \texttt{free(inst->dist)} if it is not \texttt{NULL}. Set to \texttt{NULL}.
+  \item Set \texttt{inst->n = 0}.
+\end{enumerate}
+
+\textbf{Why nullify after free?} Calling \texttt{free()} on a pointer does not set the pointer to \texttt{NULL}. If anything later accidentally calls \texttt{free()} again on the same pointer, it is undefined behaviour (double-free). Setting to \texttt{NULL} after freeing makes the struct safe to call \texttt{free} on a second time (\texttt{free(NULL)} is always a no-op in C).
+
+\textbf{Why safe on partial init?} During \texttt{tsp\_instance\_load}, several allocations happen. If the third allocation fails and you return \texttt{-1}, the struct has some non-\texttt{NULL} pointers and some \texttt{NULL} ones. If \texttt{free} only frees non-\texttt{NULL} pointers, the caller can always call \texttt{tsp\_instance\_free} unconditionally without leaking.
+
+\end{apispec}
+
+\vspace{8pt}
+
+\begin{apispec}{tsp\_build\_distance\_matrix}
+
+\textbf{Signature:}
+\begin{lstlisting}[style=cstyle, numbers=none]
+int tsp_build_distance_matrix(TSPInstance *inst);
+\end{lstlisting}
+
+\textbf{Arguments:}
+\begin{itemize}
+  \item \texttt{inst} --- Pointer to a \texttt{TSPInstance} that has already been successfully loaded: \texttt{inst->n} $\geq 1$, \texttt{coords\_x} and \texttt{coords\_y} are valid, \texttt{dist} is \texttt{NULL} (or the function will overwrite it).
+\end{itemize}
+
+\textbf{Returns:}
+\begin{itemize}
+  \item \texttt{0} on success. \texttt{inst->dist} points to a heap-allocated array of \texttt{n*n} doubles satisfying the invariants (diagonal zero, symmetric, non-negative).
+  \item \texttt{-1} if \texttt{malloc} fails. \texttt{inst->dist} is left \texttt{NULL}.
+\end{itemize}
+
+\textbf{What it does:}
+\begin{enumerate}[label=\arabic*.]
+  \item Allocate \texttt{n*n} doubles. Return \texttt{-1} on failure.
+  \item For all $i$: set \texttt{DIST(inst,i,i) = 0.0}.
+  \item For all $i < j$: compute $d = \sqrt{(x_i - x_j)^2 + (y_i - y_j)^2}$ using \texttt{sqrt()} from \texttt{<math.h>}. Set both \texttt{DIST(inst,i,j) = d} and \texttt{DIST(inst,j,i) = d}.
+  \item Return \texttt{0}.
+\end{enumerate}
+
+\textbf{Why only the upper triangle?} Computing only $j > i$ means each pair is computed once. Mirroring enforces $D_{ij} = D_{ji}$ \emph{by construction} from the same value, not from two independent computations that might differ by a floating-point epsilon.
+
+\textbf{The \texttt{sqrt} vs \texttt{sqrtf} issue:} \texttt{sqrt()} from \texttt{<math.h>} takes and returns \texttt{double}. \texttt{sqrtf()} takes and returns \texttt{float}. Since both coordinates and distances are \texttt{double} in this design, use \texttt{sqrt()}. If you used \texttt{float} and called \texttt{sqrt()} instead of \texttt{sqrtf()}, the argument would be implicitly promoted to \texttt{double} for the computation and then truncated back to \texttt{float} on assignment---not undefined behaviour, but needless and slightly imprecise. Always match the function suffix to your type.
+
+\end{apispec}
+
+\newpage

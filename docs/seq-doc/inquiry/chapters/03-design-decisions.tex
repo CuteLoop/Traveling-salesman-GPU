@@ -1,0 +1,259 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Design Decision 1: Matrix Storage Layout}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+This is the most fundamental architectural decision in Phase 1.
+
+\subsection{The three options}
+
+You are choosing how to represent a 2D grid of $n \times n$ distances in C memory. Here are the three serious candidates.
+
+\textbf{Option A:} Array of pointers (\texttt{double **dist})
+\begin{lstlisting}[style=cstyle]
+double **dist = malloc(n * sizeof(double *));   // 1 malloc
+for (int i = 0; i < n; i++)
+    dist[i] = malloc(n * sizeof(double));       // n more mallocs
+// Access: dist[i][j]
+\end{lstlisting}
+
+\textbf{Option B:} Flat 1D array (\texttt{double *dist})
+\begin{lstlisting}[style=cstyle]
+double *dist = malloc(n * n * sizeof(double));  // 1 malloc
+// Access: dist[i * n + j]
+// Or with a macro: DIST(inst, i, j)
+\end{lstlisting}
+
+\textbf{Option C:} No stored matrix --- compute on demand
+\begin{lstlisting}[style=cstyle]
+// No dist field at all.
+// Call: sqrt((x[i]-x[j])^2 + (y[i]-y[j])^2) each time.
+\end{lstlisting}
+
+\subsection{Comparison table}
+
+\begin{inquiry}{Work through this table before reading the recommendation}
+Fill in each cell before reading further. Forced thinking before revealed answer.
+\end{inquiry}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.6}
+\begin{tabularx}{\textwidth}{>{\bfseries}p{4.2cm} X X X}
+\toprule
+Property & \textbf{A: double**} & \textbf{B: flat double*} & \textbf{C: on demand} \\
+\midrule
+Number of \texttt{malloc} calls & $n + 1$ & 1 & 0 \\
+Memory is contiguous? & No & Yes & N/A \\
+Rows adjacent in memory? & No & Yes & N/A \\
+\texttt{free()} complexity & loop + outer free & single free & nothing \\
+Copy to GPU (\texttt{cudaMemcpy}) & $n$ calls & 1 call & N/A \\
+Access syntax & \texttt{dist[i][j]} & \texttt{dist[i*n+j]} & function call \\
+Spatial cache locality & Poor & Excellent & N/A \\
+Work per distance query & O(1) & O(1) & 1 sqrt + arithmetic \\
+Repeated access cost & Equal & Equal & Each call is paid again \\
+\bottomrule
+\end{tabularx}
+\end{center}
+
+\subsection{The hardware reason flat arrays win}
+
+When the CPU reads memory, it does not load one byte---it loads a \textbf{cache line} (typically 64 bytes on modern hardware). If your data is contiguous, loading one element brings its neighbours into cache automatically. This is called \emph{spatial locality}, and it means the hardware prefetcher can predict your next access and load it before you ask.
+
+With \texttt{double**}, each row is a separate allocation somewhere in the heap. Row $i$ and row $i+1$ are not adjacent. When you finish row $i$ and start row $i+1$, the prefetcher cannot help you. This causes a cache miss for every row boundary.
+
+For GPU transfer: \texttt{cudaMemcpy} expects a single contiguous source address and a byte count. A flat array gives you that in one call. A \texttt{double**} requires either $n$ individual copies (expensive overhead) or a reformatting step before transfer.
+
+\begin{goodbox}{Decision: Use Option B}
+Flat 1D array, accessed with a macro. Reason: single allocation, contiguous memory, one-call GPU copy, simple ownership model. Option A is the beginner trap in C. Option C is only interesting if memory is extremely constrained and access is sparse---not true for a dense GA solver.
+\end{goodbox}
+
+\subsection{The access macro and why it works}
+
+In C, a 2D index $(i, j)$ in a row-major flat array of width $n$ is computed as $i \cdot n + j$. You will expose this through a macro so that code that uses the matrix does not need to know the internal layout:
+
+\begin{lstlisting}[style=cstyle]
+#define DIST(inst, i, j)  ((inst)->dist[(i) * (inst)->n + (j)])
+\end{lstlisting}
+
+The extra parentheses around every argument are mandatory. Without them, a call like \texttt{DIST(inst, a+1, b)} would expand to \texttt{inst->dist[a+1 * n + b]}, which is wrong due to operator precedence. Parenthesise macro arguments defensively, always.
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Design Decision 2: Distance Matrix Precision}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The type candidates}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{lccccl}
+\toprule
+Type & Bytes & Range & Decimal digits & $128^2$ footprint & Notes \\
+\midrule
+\texttt{double} & 8 & $\pm 1.8 \times 10^{308}$ & $\approx 15$--16 & 128 KB & IEEE 754 double precision \\
+\texttt{float}  & 4 & $\pm 3.4 \times 10^{38}$  & $\approx 6$--7  &  64 KB & IEEE 754 single precision \\
+\texttt{uint16\_t} & 2 & 0--65535 & integer only & 32 KB & Requires explicit rounding \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\subsection{The GPU constant-memory calculation (done correctly)}
+
+Both source proposals discuss GPU \texttt{\_\_constant\_\_} memory. You should understand this, but do not let it drive your Phase 1 decision.
+
+\textbf{Nominal constant memory budget on NVIDIA hardware:} 64 KB.
+
+\begin{align*}
+128 \times 128 \times 8 &= 131{,}072 \text{ bytes} = 128 \text{ KB} \quad \text{(double --- too large)} \\
+128 \times 128 \times 4 &= 65{,}536 \text{ bytes} = 64 \text{ KB} \quad \text{(float --- exactly the limit)} \\
+128 \times 128 \times 2 &= 32{,}768 \text{ bytes} = 32 \text{ KB} \quad \text{(uint16\_t --- fits comfortably)}
+\end{align*}
+
+\begin{warning}{The constant-memory trap}
+Proposal B suggests using \texttt{float} because $128^2 \times 4 = 64$\,KB fits the constant memory budget. This reasoning has two problems:
+
+\begin{enumerate}[label=\arabic*.]
+  \item 64\,KB is the \emph{nominal} maximum. In practice, the CUDA runtime and driver also use constant memory for internal variables. Your available budget is typically less than 64\,KB.
+  \item Constant memory is not a scratchpad you can always use. The GPU broadcasts from constant memory efficiently \emph{only when all threads in a warp access the same address simultaneously}. A GA kernel where each thread follows a different tour accesses distances non-uniformly, which means constant memory may actually be \emph{slower} than L2 cache for this application.
+\end{enumerate}
+
+The right design choice is: \textbf{use what is correct and clean in Phase 1}. We will decide GPU memory placement in Phase 3, when we have profiling data.
+\end{warning}
+
+\subsection{The \texttt{uint16\_t} option evaluated}
+
+Proposal B raises \texttt{uint16\_t}. This is a valid option for solvers that use TSPLIB instances with \emph{integer weights}, but not for Euclidean instances. The reason:
+
+Euclidean distance between $(0,0)$ and $(1,1)$ is $\sqrt{2} \approx 1.41421356\ldots$. To store this as \texttt{uint16\_t = 1} you must round. TSPLIB defines a specific rounding convention (\texttt{NINT}, which is nearest-integer). Using it changes the problem slightly. For Phase 1 you are building a general Euclidean solver, so discard \texttt{uint16\_t} unless you later decide to implement TSPLIB integer-weight mode.
+
+\begin{goodbox}{Decision: Use \texttt{double} for Phase 1}
+\begin{itemize}
+  \item \texttt{double} is the natural type for Euclidean geometry in C. \texttt{sqrt} returns \texttt{double}; coordinates parsed with \texttt{\%lf} are \texttt{double}.
+  \item No implicit casts, no rounding decisions, no precision surprises.
+  \item The CPU baseline is for correctness first. Memory pressure optimisation is a Phase 3 concern.
+  \item If you intentionally choose \texttt{float} for Phase 1, you must document that you understand the above and explain why the reduced precision is acceptable.
+\end{itemize}
+\end{goodbox}
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Design Decision 3: Full Matrix vs.\ Packed Symmetric Storage}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+The Euclidean distance matrix is symmetric: $D_{ij} = D_{ji}$. You can exploit this.
+
+\subsection{Two representations}
+
+\textbf{Full $n \times n$ matrix:}
+\begin{itemize}
+  \item Memory: $n^2$ entries.
+  \item Index: \texttt{dist[i*n + j]} for any $(i, j)$.
+  \item Diagonal: $D_{ii} = 0$ explicitly stored.
+\end{itemize}
+
+\textbf{Packed upper-triangular (only $j > i$):}
+\begin{itemize}
+  \item Memory: $n(n-1)/2$ entries.
+  \item Index: requires a formula. For $i < j$: index $= i \cdot n - i(i+1)/2 + j - i - 1$.
+  \item Diagonal: not stored; always implicitly 0.
+\end{itemize}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{lcc}
+\toprule
+Property & Full $n \times n$ & Packed upper triangle \\
+\midrule
+Memory for $n=128$, \texttt{double} & 128 KB & 63.5 KB \\
+Memory for $n=512$, \texttt{double} & 2 MB & $\approx$ 1 MB \\
+Index expression & \texttt{i*n+j} & $in - i(i+1)/2 + j - i - 1$ \\
+Can use same DIST macro? & Yes & No; needs new macro \\
+Access pattern for GA & Uniform & Uniform \\
+Copy to GPU & Trivial & Trivial \\
+Debuggability & Easy (print as grid) & Hard (packed blob) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{inquiry}{Before reading the decision, answer this}
+If you pack only the upper triangle and the solver code calls \texttt{DIST(inst, 5, 2)} where $5 > 2$, what happens? How would you handle it?
+\end{inquiry}
+
+Answer: your index formula is only defined for $i < j$. A call with $i > j$ gives a wrong result silently. You must either (a) swap $i$ and $j$ in the macro when $i > j$, or (b) enforce at the call site that queries always use the canonical order. Both add complexity.
+
+\begin{goodbox}{Decision: Use full $n \times n$ matrix for Phase 1}
+Reason: simplicity, debuggability, and uniform access with no conditional in the index. The memory waste is real ($\approx 50\%$) but small in absolute terms at Phase 1 sizes. Pack only if profiling shows memory is a bottleneck, or if you implement an explicit extension.
+\end{goodbox}
+
+\newpage
+
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Design Decision 4: Parsing Strategy}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{The two parsing approaches}
+
+\textbf{Option A: \texttt{fscanf} directly}
+\begin{lstlisting}[style=cstyle]
+int id;
+double x, y;
+while (fscanf(fp, "%d %lf %lf", &id, &x, &y) == 3) {
+    // store x, y
+}
+\end{lstlisting}
+
+\textbf{Option B: \texttt{fgets} + \texttt{sscanf}}
+\begin{lstlisting}[style=cstyle]
+char line[256];
+while (fgets(line, sizeof(line), fp)) {
+    int id;
+    double x, y;
+    if (sscanf(line, "%d %lf %lf", &id, &x, &y) == 3) {
+        // store x, y
+    } else {
+        // handle malformed line
+    }
+}
+\end{lstlisting}
+
+\subsection{Comparison}
+
+\begin{center}
+\renewcommand{\arraystretch}{1.5}
+\begin{tabular}{lcc}
+\toprule
+Property & \texttt{fscanf} & \texttt{fgets} + \texttt{sscanf} \\
+\midrule
+What if a line is 10,000 chars? & Reads until whitespace, no truncation risk & Truncates to buffer; detectable \\
+What if a field is ``ABC''? & Returns 0 matches; position hard to recover & Line is already buffered; easy to skip \\
+Error recovery position in file & Ambiguous & Clean: you are at line start \\
+Can you re-examine a bad line? & Only with ungetc tricks & Yes: you have it in \texttt{line[]} \\
+Malformed file: can you free before exit? & Harder (parse state unclear) & Easier (line-level granularity) \\
+\bottomrule
+\end{tabular}
+\end{center}
+
+\begin{goodbox}{Decision: Use \texttt{fgets} + \texttt{sscanf}}
+The line-buffer approach keeps the parse state clear at all times. If a line fails to parse, you know exactly where you are in the file, you can log or reject cleanly, and you can call \texttt{tsp\_instance\_free} before returning an error. This is the correct choice for any parser that must handle malformed input gracefully in C.
+\end{goodbox}
+
+\subsection{One-pass vs.\ two-pass allocation}
+
+When parsing coordinates, you need to allocate arrays. You do not know $n$ until you have scanned the file. Two strategies:
+
+\textbf{Two-pass:} scan the file once counting cities, seek back to the start, allocate exactly, parse again.\\
+\textbf{One-pass:} grow arrays dynamically with \texttt{realloc} as you read.
+
+\begin{inquiry}{Two-pass or one-pass?}
+\begin{enumerate}[label=\alph*.]
+  \item What does \texttt{realloc} do if the new size is larger? What does it do to the old pointer?
+  \item In a two-pass parser, what happens if the file is on a pipe or socket rather than disk?
+  \item Which approach has more predictable memory access patterns during parsing?
+  \item TSPLIB files often have a \texttt{DIMENSION} header field. If you parse it first, can you do single-pass allocation without \texttt{realloc}?
+\end{enumerate}
+\end{inquiry}
+
+\textbf{Recommended for this assignment:} parse the \texttt{DIMENSION} header, allocate once with known size, then parse \texttt{NODE\_COORD\_SECTION} in one pass. This avoids both \texttt{realloc} complexity and a second file scan.
+
+\newpage

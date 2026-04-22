@@ -1,0 +1,131 @@
+\documentclass[11pt]{article}
+
+\usepackage[margin=1in]{geometry}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{amsmath, amssymb}
+\usepackage{booktabs}
+\usepackage{enumitem}
+\usepackage{xcolor}
+\usepackage{hyperref}
+\usepackage{listings}
+\usepackage{float}
+\usepackage{titlesec}
+\usepackage{tcolorbox}
+\usepackage{array}
+\usepackage{tabularx}
+\usepackage{multirow}
+
+\tcbuselibrary{skins, breakable}
+
+%% ── colour palette ──────────────────────────────────────────────────────────
+\definecolor{inquiryblue}{RGB}{20, 60, 120}
+\definecolor{inquirybg}{RGB}{235, 242, 255}
+\definecolor{warnorange}{RGB}{180, 80, 0}
+\definecolor{warnbg}{RGB}{255, 243, 224}
+\definecolor{goodgreen}{RGB}{0, 90, 40}
+\definecolor{goodbg}{RGB}{220, 245, 230}
+\definecolor{codegray}{RGB}{245, 245, 245}
+\definecolor{critred}{RGB}{140, 20, 20}
+\definecolor{critbg}{RGB}{255, 235, 235}
+
+\hypersetup{
+  colorlinks=true,
+  linkcolor=inquiryblue,
+  urlcolor=inquiryblue,
+  citecolor=inquiryblue
+}
+
+\newtcolorbox{inquiry}[1]{
+  colback=inquirybg, colframe=inquiryblue,
+  fonttitle=\bfseries\color{white},
+  title={#1},
+  breakable, arc=2pt, boxrule=1pt
+}
+
+\newtcolorbox{warning}[1]{
+  colback=warnbg, colframe=warnorange,
+  fonttitle=\bfseries\color{white},
+  title={#1},
+  breakable, arc=2pt, boxrule=1pt
+}
+
+\newtcolorbox{goodbox}[1]{
+  colback=goodbg, colframe=goodgreen,
+  fonttitle=\bfseries\color{white},
+  title={#1},
+  breakable, arc=2pt, boxrule=1pt
+}
+
+\newtcolorbox{critique}[1]{
+  colback=critbg, colframe=critred,
+  fonttitle=\bfseries\color{white},
+  title={#1},
+  breakable, arc=2pt, boxrule=1pt
+}
+
+\newtcolorbox{apispec}[1]{
+  colback=codegray, colframe=black!40,
+  fonttitle=\bfseries,
+  title={API: \texttt{#1}},
+  breakable, arc=2pt, boxrule=0.6pt
+}
+
+\lstdefinestyle{cstyle}{
+  language=C,
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={─}{{-}}1,
+  basicstyle=\ttfamily\small,
+  keywordstyle=\color{inquiryblue}\bfseries,
+  commentstyle=\color{goodgreen}\itshape,
+  stringstyle=\color{warnorange},
+  showstringspaces=false,
+  frame=single,
+  breaklines=true,
+  columns=fullflexible,
+  backgroundcolor=\color{codegray},
+  rulecolor=\color{black!30},
+  xleftmargin=6pt,
+  xrightmargin=6pt,
+  numbers=left,
+  numberstyle=\tiny\color{black!40},
+  numbersep=8pt
+}
+
+\lstdefinestyle{shellstyle}{
+  inputencoding=utf8,
+  extendedchars=true,
+  literate={─}{{-}}1,
+  basicstyle=\ttfamily\small,
+  backgroundcolor=\color{black!90},
+  basicstyle=\ttfamily\small\color{white},
+  frame=none, breaklines=true,
+  xleftmargin=6pt, xrightmargin=6pt
+}
+
+\titleformat{\section}{\large\bfseries\color{inquiryblue}}{}{0em}{\thesection\quad}
+\titleformat{\subsection}{\normalsize\bfseries\color{inquiryblue!80!black}}{}{0em}{\thesubsection\quad}
+
+\title{
+  \textbf{\large Phase 1: TSP Instance Loading \& Distance Matrix}\\[4pt]
+  \large An Inquiry-Based Systems Programming Assignment\\[8pt]
+  \normalsize\textit{Architecture First. Code Second.}
+}
+\author{}
+\date{}
+
+\begin{document}
+\maketitle
+\tableofcontents
+\newpage
+
+\input{chapters/01-critique}
+\input{chapters/02-foundations}
+\input{chapters/03-design-decisions}
+\input{chapters/04-api-spec}
+\input{chapters/05-format-implementation-testing}
+\input{chapters/06-questions-reflection}
+
+\end{document}

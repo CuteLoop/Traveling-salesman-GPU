@@ -1,0 +1,59 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{Critique of the Two Proposal Documents}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+Before introducing the revised assignment, it is worth auditing the two source documents against your stated learning goals. Your goals, ranked, are:
+
+\begin{enumerate}[label=\textbf{\arabic*.}]
+  \item \textbf{Primary:} System design --- understand architecture, analyse alternatives, weigh tradeoffs.
+  \item \textbf{Secondary:} Learn to implement in C at a level that builds real familiarity.
+  \item \textbf{Tertiary:} Arrive at a working, memory-safe, testable Phase 1 baseline.
+\end{enumerate}
+
+\subsection{Proposal A (Doc 1: ``Inquiry-Based Coding Assignment'')}
+
+\begin{goodbox}{What Proposal A does well}
+\begin{itemize}
+  \item Strong on the \emph{why} behind every design decision. It explains \emph{why} flat arrays beat \texttt{double**}, not just which to use.
+  \item Correctly identifies that constant-memory is \emph{not} a reliable target and gives exact arithmetic to prove it ($128 \times 128 \times 8 = 128$\,KB vs.\ 64\,KB budget).
+  \item Provides a clean, explicit API with named functions, separating concerns properly.
+  \item Offers extension paths for ambitious work without muddying the main path.
+  \item Includes a concrete testing matrix (P-01 through M-01), which is essential for a verification mindset.
+\end{itemize}
+\end{goodbox}
+
+\begin{critique}{What Proposal A fails to deliver for your goals}
+\begin{itemize}
+  \item \textbf{Functions are named but not specified.} You see \texttt{tsp\_instance\_load(const char *path, TSPInstance *out)} but nowhere is there a description of: what arguments mean, what return values mean, what the function guarantees on success, what it guarantees on failure, or what state \texttt{out} is left in when something goes wrong. For someone learning C, this is the exact information that needs to be explicit.
+  \item \textbf{No hardware grounding.} It talks about flat arrays being good for GPU mirroring but does not explain \emph{why} at the memory-bus level. It mentions cache locality without explaining spatial vs.\ temporal locality, prefetching, or cache lines.
+  \item \textbf{Inquiry boxes are vague.} ``Compare alternatives'' appears often, but the actual comparison is not scaffolded with enough concrete data to force a conclusion. A learner can read the inquiries and still not know how to decide.
+  \item \textbf{No file-structure scaffolding.} A beginning systems programmer looking at this needs to know: where does each function live, what headers does each file include, and in what order should things be written. That guidance is absent.
+\end{itemize}
+\end{critique}
+
+\subsection{Proposal B (Doc 2: ``Memory \& Parsing Audit'')}
+
+\begin{goodbox}{What Proposal B does well}
+\begin{itemize}
+  \item Hardware framing is strong: it mentions syscall count, cache prefetchers, and \texttt{cudaMemcpy} count explicitly.
+  \item The \texttt{sqrt} vs.\ \texttt{sqrtf} inquiry is excellent and points at a real C pitfall that most beginners miss.
+  \item Modular naming (Module 1--4) makes the assignment feel manageable.
+  \item The symmetry question at the end is a genuine design fork, not rhetorical.
+\end{itemize}
+\end{goodbox}
+
+\begin{critique}{What Proposal B fails to deliver for your goals}
+\begin{itemize}
+  \item \textbf{The constant-memory analysis is exactly backwards.} Proposal B presents \texttt{float} as the solution to the 64\,KB constraint for 128 cities. Let's check: $128 \times 128 \times 4 = 65{,}536$ bytes $= 64$\,KB exactly. That is the \emph{nominal hardware limit}, not comfortable margin. Proposal A correctly identifies this. Designing a system where you pray that the hardware limit is not 63.5\,KB in practice is not architecture---it is wishful thinking.
+  \item \textbf{The \texttt{uint16\_t} option is raised and never resolved.} Integer weights for Euclidean coordinates with decimal values require explicit rounding decisions (floor? round? TSPLIB rounding?) that have non-trivial effects on tour quality. Raising this option without providing the intellectual tools to evaluate it is harmful.
+  \item \textbf{Function signatures are not given at all.} The assignment asks you to implement \texttt{tsp\_instance\_load}, \texttt{tsp\_instance\_free}, and \texttt{tsp\_build\_distance\_matrix} but does not specify return types, argument meanings, error semantics, or invariants.
+  \item \textbf{The modular structure is not connected.} Modules 1--4 read like four separate assignments. There is no scaffolding that shows how the pieces connect: what struct one module produces, which pointer the next module consumes.
+  \item \textbf{No test structure is given.} ``Write a test runner'' is not enough guidance for a C learner to understand how to write a minimal unit test in plain C without a framework.
+\end{itemize}
+\end{critique}
+
+\begin{inquiry}{Synthesis verdict}
+Neither proposal alone is sufficient for your goals. Proposal A has better design reasoning; Proposal B has better hardware grounding. The revised assignment below takes the strongest elements of both, corrects the constant-memory mistake, and adds the one thing both are missing: \textbf{complete function contracts that specify inputs, outputs, and behavioral guarantees in enough detail to write the code from.}
+\end{inquiry}
+
+\newpage

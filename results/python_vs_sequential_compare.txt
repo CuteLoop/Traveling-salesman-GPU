@@ -1,0 +1,24 @@
+=== Python baseline GA vs Sequential C GA ===
+instance=C:\Users\ual-laptop\Documents\Traveling-salesman-GPU\sequential\tests\fixtures\smoke_20.tsp
+pop=100
+gen=200
+mutation=0.1
+elite=2
+seed=42
+python_distance=75.776906
+python_time_sec=41.956912
+c_distance=77.492495
+c_time_sec=0.055615
+distance_abs_diff=1.715589
+same_tour=False
+python_route=[13, 12, 1, 8, 18, 4, 17, 2, 3, 16, 19, 10, 9, 11, 5, 20, 6, 7, 15, 14]
+c_route=[9, 6, 5, 19, 8, 10, 4, 14, 13, 7, 17, 3, 16, 1, 2, 0, 15, 12, 11, 18]
+python_tour_order=13 -> 12 -> 1 -> 8 -> 18 -> 4 -> 17 -> 2 -> 3 -> 16 -> 19 -> 10 -> 9 -> 11 -> 5 -> 20 -> 6 -> 7 -> 15 -> 14 -> 13
+c_tour_order=9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9
+
+--- sequential_stdout ---
+ga-tsp: instance=tests\fixtures\smoke_20.tsp  n=20  pop=100  gen=200  seed=42
+Best distance: 77.492495
+Best tour (0-based indices):
+9 6 5 19 8 10 4 14 13 7 17 3 16 1 2 0 15 12 11 18 9
+Statistics written to results_compare.csv (201 generations)

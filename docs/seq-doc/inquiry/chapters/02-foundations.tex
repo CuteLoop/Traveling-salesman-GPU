@@ -1,0 +1,45 @@
+%% ─────────────────────────────────────────────────────────────────────────────
+\section{The Revised Assignment: Phase 1 Foundations}
+%% ─────────────────────────────────────────────────────────────────────────────
+
+\subsection{What you are building}
+
+You are implementing a data-loading and matrix-construction layer for a Traveling Salesman Problem (TSP) solver in C99. This layer sits at the foundation of a system that will later run a Genetic Algorithm on the CPU, then migrate the hottest kernel to CUDA.
+
+The system pipeline for Phase 1 is:
+
+\begin{center}
+\ttfamily
+\small
+[.tsp file on disk] $\longrightarrow$ \textbf{parser} $\longrightarrow$ \textbf{coordinate arrays} $\longrightarrow$ \textbf{distance matrix} $\longrightarrow$ [solver, later]
+\end{center}
+
+\medskip
+
+Phase 1 delivers exactly three things:
+\begin{enumerate}[label=\arabic*.]
+  \item A struct that holds a TSP instance in memory.
+  \item A function that parses a TSPLIB-format file into that struct.
+  \item A function that fills the distance matrix from the parsed coordinates.
+\end{enumerate}
+
+\subsection{File layout you will create}
+
+\begin{lstlisting}[style=cstyle, language={}]
+tsp/
+  include/
+    instance.h        <- struct definition, macro, function declarations
+  src/
+    instance.c        <- parsing, matrix construction, cleanup
+  tests/
+    test_instance.c   <- unit tests (no framework needed)
+    fixtures/
+      square_4.tsp              <- 4-city known geometry test
+      malformed_bad_coord.tsp   <- line with letters instead of numbers
+      malformed_missing_section.tsp  <- no NODE_COORD_SECTION
+  Makefile
+\end{lstlisting}
+
+You will implement in this order: struct $\to$ cleanup $\to$ parser $\to$ matrix $\to$ tests.
+
+\newpage

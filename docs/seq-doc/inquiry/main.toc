@@ -1,0 +1,40 @@
+\contentsline {section}{\numberline {1}Critique of the Two Proposal Documents}{3}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Proposal A (Doc 1: ``Inquiry-Based Coding Assignment'')}{3}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Proposal B (Doc 2: ``Memory \& Parsing Audit'')}{4}{subsection.1.2}%
+\contentsline {section}{\numberline {2}The Revised Assignment: Phase 1 Foundations}{5}{section.2}%
+\contentsline {subsection}{\numberline {2.1}What you are building}{5}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}File layout you will create}{5}{subsection.2.2}%
+\contentsline {section}{\numberline {3}Design Decision 1: Matrix Storage Layout}{6}{section.3}%
+\contentsline {subsection}{\numberline {3.1}The three options}{6}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Comparison table}{6}{subsection.3.2}%
+\contentsline {subsection}{\numberline {3.3}The hardware reason flat arrays win}{7}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}The access macro and why it works}{7}{subsection.3.4}%
+\contentsline {section}{\numberline {4}Design Decision 2: Distance Matrix Precision}{9}{section.4}%
+\contentsline {subsection}{\numberline {4.1}The type candidates}{9}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}The GPU constant-memory calculation (done correctly)}{9}{subsection.4.2}%
+\contentsline {subsection}{\numberline {4.3}The \texttt {uint16\_t} option evaluated}{9}{subsection.4.3}%
+\contentsline {section}{\numberline {5}Design Decision 3: Full Matrix vs.\ Packed Symmetric Storage}{11}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Two representations}{11}{subsection.5.1}%
+\contentsline {section}{\numberline {6}Design Decision 4: Parsing Strategy}{12}{section.6}%
+\contentsline {subsection}{\numberline {6.1}The two parsing approaches}{12}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Comparison}{12}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}One-pass vs.\ two-pass allocation}{12}{subsection.6.3}%
+\contentsline {section}{\numberline {7}The Complete API Specification}{14}{section.7}%
+\contentsline {subsection}{\numberline {7.1}The data structure (\texttt {include/instance.h})}{14}{subsection.7.1}%
+\contentsline {section}{\numberline {8}The TSPLIB File Format (Narrow Subset)}{19}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Format you will support}{19}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Test fixture: \texttt {square\_4.tsp}}{19}{subsection.8.2}%
+\contentsline {section}{\numberline {9}C Implementation Guide}{21}{section.9}%
+\contentsline {subsection}{\numberline {9.1}Step 1: Struct, macro, and static initialiser}{21}{subsection.9.1}%
+\contentsline {subsection}{\numberline {9.2}Step 2: Implement \texttt {tsp\_instance\_free}}{21}{subsection.9.2}%
+\contentsline {subsection}{\numberline {9.3}Step 3: Skeleton of \texttt {tsp\_instance\_load}}{21}{subsection.9.3}%
+\contentsline {subsection}{\numberline {9.4}Step 4: Implement \texttt {tsp\_build\_distance\_matrix}}{22}{subsection.9.4}%
+\contentsline {subsection}{\numberline {9.5}Step 5: The Makefile}{23}{subsection.9.5}%
+\contentsline {section}{\numberline {10}Testing: Writing Plain-C Unit Tests}{24}{section.10}%
+\contentsline {subsection}{\numberline {10.1}Malformed fixture files}{25}{subsection.10.1}%
+\contentsline {subsection}{\numberline {10.2}Running under Valgrind}{26}{subsection.10.2}%
+\contentsline {section}{\numberline {11}Test Matrix: What You Are Verifying}{27}{section.11}%
+\contentsline {section}{\numberline {12}Questions You Must Answer in Writing}{28}{section.12}%
+\contentsline {section}{\numberline {13}Implementation Order Summary}{29}{section.13}%
+\contentsline {section}{\numberline {14}Reflection: After Everything Passes}{30}{section.14}%
+\contentsline {section}{\numberline {15}Optional Extensions}{30}{section.15}%

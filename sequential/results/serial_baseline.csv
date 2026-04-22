@@ -1,0 +1,6 @@
+instance,seed,population,generations,best_distance,elapsed_sec
+smoke_20.tsp,42,500,1000,77.419989,0.178
+smoke_20.tsp,123,500,1000,76.359059,0.174
+smoke_20.tsp,999,500,1000,75.776906,0.179
+smoke_20.tsp,5555,500,1000,77.347991,0.22
+smoke_20.tsp,9876,500,1000,75.776906,0.19
