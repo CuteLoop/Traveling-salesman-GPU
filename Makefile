@@ -1,7 +1,7 @@
 # Minimal HPC-ready Makefile for Traveling-salesman-GPU
 # Builds sequential + CUDA binaries into build/
 
-CXX ?= g++
+CC ?= gcc
 NVCC ?= nvcc
 
 CUDA_HOME ?=
@@ -39,8 +39,9 @@ NAIVE_BIN  := $(BUILD_DIR)/GPU-Naive
 HYBRID_BIN := $(BUILD_DIR)/CUDA-GA
 ISLAND_BIN := $(BUILD_DIR)/CUDA-GA-GPU-Pop
 
-CXXFLAGS   ?= -O3 -std=c11 -Wall -Wextra -Isequential/include
-NVCCFLAGS  ?= -O3 -std=c++17 -arch=sm_60 -lineinfo
+CFLAGS     ?= -O3 -std=c11 -Wall -Wextra -Isequential/include
+# Use C++11 for broad compatibility with older HPC host compilers.
+NVCCFLAGS  ?= -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo
 
 LDLIBS_SEQ := -lm
 
@@ -52,7 +53,7 @@ dirs:
 	mkdir -p $(BUILD_DIR)
 
 info:
-	@echo "CXX=$(CXX)"
+	@echo "CC=$(CC)"
 	@echo "NVCC=$(NVCC_CMD)"
 	@echo "CUDA_HOME=$(CUDA_HOME)"
 	@echo "BUILD_DIR=$(BUILD_DIR)"
@@ -63,7 +64,7 @@ info:
 	@echo "PARSER_SRC=$(PARSER_SRC)"
 
 $(SEQ_BIN): $(SEQ_MAIN) $(SEQ_SRCS)
-	$(CXX) $(CXXFLAGS) -o $@ $^ $(LDLIBS_SEQ)
+	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS_SEQ)
 
 $(NAIVE_BIN): $(NAIVE_SRC) $(PARSER_SRC) tsplib_parser.h
 	$(NVCC_CMD) $(NVCCFLAGS) -o $@ $(NAIVE_SRC) $(PARSER_SRC)

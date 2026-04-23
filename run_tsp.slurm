@@ -14,7 +14,12 @@
 set -euo pipefail
 
 module purge
-module load cuda11/11.0
+if module avail cuda11/11.8 2>&1 | grep -q "cuda11/11.8"; then
+  module load cuda11/11.8
+else
+  echo "Warning: module cuda11/11.8 not found, falling back to cuda11/11.0"
+  module load cuda11/11.0
+fi
 
 # EDIT THIS PATH ON HPC
 REPO_DIR=/home/u16/joelmaldonado/HPC-GPU/tsp-ga

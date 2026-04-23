@@ -256,17 +256,17 @@ From repository root, compile each executable by linking its `.cu` file with `ts
 Linux/macOS:
 
 ```bash
-nvcc -O2 -std=c++17 -arch=sm_60 -o GPU-Naive GPU-Naive.cu tsplib_parser.cpp
-nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA CUDA-GA.cu tsplib_parser.cpp
-nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA-GPU-Pop CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o GPU-Naive GPU-Naive.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA CUDA-GA.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA-GPU-Pop CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
 ```
 
 Windows PowerShell:
 
 ```powershell
-nvcc -O2 -std=c++17 -arch=sm_60 -o GPU-Naive.exe GPU-Naive.cu tsplib_parser.cpp
-nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA.exe CUDA-GA.cu tsplib_parser.cpp
-nvcc -O2 -std=c++17 -arch=sm_60 -o CUDA-GA-GPU-Pop.exe CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o GPU-Naive.exe GPU-Naive.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA.exe CUDA-GA.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA-GPU-Pop.exe CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
 ```
 
 If your GPU is not Pascal/P100, adjust `-arch=sm_60` to your compute capability.
@@ -314,6 +314,39 @@ Example:
 ```
 
 Note: this version currently enforces `MAX_CITIES=128`.
+
+## 8.5 HPC Toolchain Profile and Engineering Decisions
+
+The cluster workflow is tuned for an HPC stack where `cuda11/11.8` is available and some host compilers are older than modern desktop toolchains.
+
+### Module decision
+
+- `build.sh` and `run_tsp.slurm` now prefer `cuda11/11.8`.
+- If `cuda11/11.8` is not present on a node, scripts fall back to `cuda11/11.0`.
+
+Why: this keeps jobs portable across partitions and avoids hard failures due to site-specific module naming.
+
+### Language standard decision
+
+- Sequential C build uses `gcc` with `-std=c11`.
+- CUDA builds use `nvcc` with `-std=c++11 -Xcompiler -std=gnu++11`.
+
+Why: this is compatible with older host GCC toolchains commonly found on shared HPC systems while still supporting current CUDA code (`chrono`, `nullptr`, modern STL usage).
+
+### Recommended HPC build/run flow
+
+From repository root:
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+Submit benchmark job:
+
+```bash
+sbatch run_tsp.slurm
+```
 
 ## 9. Compare Python Baseline vs Sequential C (Same Instance)
 

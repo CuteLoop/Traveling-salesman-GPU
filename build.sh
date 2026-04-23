@@ -8,7 +8,12 @@ if [[ ! -f Makefile ]]; then
 fi
 
 module purge
-module load cuda11/11.0
+if module avail cuda11/11.8 2>&1 | grep -q "cuda11/11.8"; then
+	module load cuda11/11.8
+else
+	echo "Warning: module cuda11/11.8 not found, falling back to cuda11/11.0"
+	module load cuda11/11.0
+fi
 
 echo "=== Building Traveling-salesman-GPU ==="
 echo "PWD: $(pwd)"
