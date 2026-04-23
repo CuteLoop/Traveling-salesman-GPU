@@ -78,6 +78,8 @@ _deps/
 *.layout
 *.depend
 
+build/
+
 # CUDA
 *.cubin
 *.fatbin
