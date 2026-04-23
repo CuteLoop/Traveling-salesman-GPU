@@ -1,6 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+if [[ ! -f Makefile ]]; then
+	echo "Error: top-level Makefile not found in $(pwd)"
+	echo "Run this script from the repository root after pulling latest changes."
+	exit 1
+fi
+
 module purge
 module load cuda11/11.0
 
