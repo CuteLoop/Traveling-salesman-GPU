@@ -385,6 +385,27 @@ chmod +x build.sh
 sbatch run_tsp.slurm
 ```
 
+If outputs do not appear in your current `results/` folder, check that the job is running from your current checkout. The scripts now use `SLURM_SUBMIT_DIR` (the directory where you run `sbatch`) so outputs land in that same repo.
+
+### Submit one job per implementation
+
+From repository root:
+
+```bash
+sbatch run_sequential.slurm
+sbatch run_gpu_naive.slurm
+sbatch run_cuda_ga.slurm
+sbatch run_cuda_ga_gpu_pop.slurm
+```
+
+Each job writes result files with the Slurm job ID suffix, for example:
+
+- `results/sequential_<jobid>.txt`
+- `results/sequential_stats_<jobid>.csv`
+- `results/gpu_naive_<jobid>.txt`
+- `results/cuda_ga_<jobid>.txt`
+- `results/cuda_ga_gpu_pop_<jobid>.txt`
+
 5. Monitor queue status:
 
 ```bash

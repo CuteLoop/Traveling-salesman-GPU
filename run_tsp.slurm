@@ -21,8 +21,8 @@ else
   module load cuda11/11.0
 fi
 
-# EDIT THIS PATH ON HPC
-REPO_DIR=/home/u16/joelmaldonado/HPC-GPU/tsp-ga
+# Use the directory where sbatch was invoked.
+REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
 cd "$REPO_DIR"
 
 echo "=== Host / GPU info ==="
@@ -37,11 +37,12 @@ DATASET="sequential/tests/fixtures/smoke_20.tsp"
 
 if [ ! -f "$DATASET" ]; then
     echo "Error: dataset '$DATASET' not found in $REPO_DIR"
-    echo "Update DATASET in run_tsp.slurm to a valid .tsp path."
+  echo "Update DATASET in run_tsp.slurm to a valid .tsp path."
     exit 1
 fi
 
 mkdir -p results
+echo "Writing outputs under: $REPO_DIR/results"
 
 echo "===== STARTING TSP BENCHMARKS ====="
 echo "Dataset: $DATASET"
