@@ -349,6 +349,75 @@ Submit benchmark job:
 sbatch run_tsp.slurm
 ```
 
+### HPC workflow: submit, monitor, and collect results
+
+Use this end-to-end workflow on the cluster login node.
+
+1. Sync code and go to repo:
+
+```bash
+cd ~/Traveling-salesman-GPU
+git pull
+```
+
+2. Ensure the Slurm script points to your checkout path:
+
+```bash
+nano run_tsp.slurm
+```
+
+Set `REPO_DIR` in `run_tsp.slurm` to your actual path, for example:
+
+```bash
+REPO_DIR=/home/u16/<your-username>/Traveling-salesman-GPU
+```
+
+3. Build once interactively (sanity check):
+
+```bash
+chmod +x build.sh
+./build.sh
+```
+
+4. Submit the job:
+
+```bash
+sbatch run_tsp.slurm
+```
+
+5. Monitor queue status:
+
+```bash
+squeue -u $USER
+```
+
+6. Follow job logs while running:
+
+```bash
+tail -f run_tsp.out
+tail -f run_tsp.error
+```
+
+7. After completion, check accounting summary:
+
+```bash
+sacct -j <jobid> --format=JobID,JobName,Partition,State,Elapsed,MaxRSS,AllocTRES
+```
+
+8. Review benchmark outputs:
+
+```bash
+ls -lh results
+```
+
+Expected files include:
+
+- `results/sequential.txt`
+- `results/gpu_naive.txt`
+- `results/cuda_ga.txt`
+- `results/cuda_ga_gpu_pop.txt`
+- `results/sequential_stats.csv`
+
 ## 9. Compare Python Baseline vs Sequential C (Same Instance)
 
 ### 9.0 Recommended Run Profiles
