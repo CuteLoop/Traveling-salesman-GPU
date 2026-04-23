@@ -485,37 +485,70 @@ What it does:
 
 Tip: add `--no-release-build` if you do not want the script to force `BUILD=release` for the sequential binary.
 
-### 9.1 Latest Measured Results (`smoke_20.tsp`)
+### 9.1 Local + HPC Batch Results (`smoke_20.tsp`)
 
-Comparison command used:
+This table combines local-PC measurements and HPC batch-job measurements.
+
+| Implementation | Environment | Runtime (s) | Best tour length |
+|---|---|---:|---:|
+| Python baseline (pyCombinatorial GA) | Local PC | 41.956912 | 75.776906 |
+| Sequential C (`ga-tsp`) | Local PC | 0.055615 | 77.492495 |
+| Sequential (`build/Sequential`) | HPC batch (`sequential_5487207.txt`) | 0.01 | 77.492495 |
+| GPU-Naive (`build/GPU-Naive`) | HPC batch (`gpu_naive_5487208.txt`) | 0.13 | 80 |
+| CUDA-GA hybrid (`build/CUDA-GA`) | HPC batch (`cuda_ga_5487209.txt`) | 0.39 | 75 |
+| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | HPC batch (`cuda_ga_gpu_pop_5487210.txt`) | 0.20 | 73 |
+
+### 9.2 Tour Sequences (rows) + final length
+
+| Implementation | Tour sequence (0-based cycle) | Length |
+|---|---|---:|
+| Python baseline (local) | 12 -> 11 -> 0 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 15 -> 18 -> 9 -> 8 -> 10 -> 4 -> 19 -> 5 -> 6 -> 14 -> 13 -> 12 | 75.776906 |
+| Sequential C (local) | 9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9 | 77.492495 |
+| Sequential (HPC) | 9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9 | 77.492495 |
+| GPU-Naive (HPC) | 8 -> 9 -> 18 -> 6 -> 5 -> 19 -> 4 -> 14 -> 13 -> 11 -> 12 -> 15 -> 0 -> 7 -> 3 -> 17 -> 16 -> 1 -> 2 -> 10 -> 8 | 80 |
+| CUDA-GA hybrid (HPC) | 14 -> 13 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18 -> 6 -> 11 -> 12 -> 15 -> 0 -> 3 -> 17 -> 16 -> 1 -> 2 -> 7 -> 14 | 75 |
+| CUDA-GA GPU population (HPC) | 0 -> 2 -> 1 -> 16 -> 17 -> 3 -> 7 -> 12 -> 11 -> 13 -> 14 -> 6 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18 -> 15 -> 0 | 73 |
+
+### 9.3 Tour Images (`smoke_20.tsp`)
+
+Python baseline (local):
+
+![Python local tour](img/smoke20_python_local.png)
+
+Sequential C (local):
+
+![Sequential local tour](img/smoke20_seq_local.png)
+
+Sequential (HPC):
+
+![Sequential HPC tour](img/smoke20_seq_hpc.png)
+
+GPU-Naive (HPC):
+
+![GPU-Naive HPC tour](img/smoke20_gpu_naive_hpc.png)
+
+CUDA-GA hybrid (HPC):
+
+![CUDA-GA HPC tour](img/smoke20_cuda_ga_hpc.png)
+
+CUDA-GA GPU population (HPC):
+
+![CUDA-GA-GPU-Pop HPC tour](img/smoke20_cuda_ga_gpu_pop_hpc.png)
+
+To regenerate these figures from the current result files:
 
 ```bash
-python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
+python baselines/render_smoke20_tour_gallery.py
 ```
 
-| Implementation | Distance | Runtime (s) | Tour length (cities) | Equivalent tour (rotation/reversal) |
-|---|---:|---:|---:|---|
-| Python baseline (pyCombinatorial) | 75.776906 | 41.956912 | 20 | False |
-| Sequential C (`ga-tsp`) | 77.492495 | 0.055615 | 20 | False |
+Sources:
 
-Tour order (Python baseline):
+- Local comparison script outputs: `results/python_vs_sequential_compare.csv`, `results/python_vs_sequential_compare.txt`
+- HPC batch outputs: `results/sequential_5487207.txt`, `results/gpu_naive_5487208.txt`, `results/cuda_ga_5487209.txt`, `results/cuda_ga_gpu_pop_5487210.txt`
 
-```text
-13 -> 12 -> 1 -> 8 -> 18 -> 4 -> 17 -> 2 -> 3 -> 16 -> 19 -> 10 -> 9 -> 11 -> 5 -> 20 -> 6 -> 7 -> 15 -> 14 -> 13
-```
+Note: runtimes are not directly comparable across local PC and HPC environments because hardware, compiler, and runtime conditions differ.
 
-Tour order (Sequential C):
-
-```text
-9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9
-```
-
-Outputs saved by the script:
-
-- `results/python_vs_sequential_compare.csv`
-- `results/python_vs_sequential_compare.txt`
-
-### 9.2 Longer Sequential Budgeted Run (~1/10 Python runtime)
+### 9.4 Longer Sequential Budgeted Run (~1/10 Python runtime)
 
 Sequential command used:
 
@@ -539,14 +572,63 @@ Output CSV:
 
 - `sequential/results_budget_1tenth.csv`
 
-## 10. Next Steps
+## 10. Optimization To-Do and Report Files
 
-**Current focus areas**
-- Benchmark sequential vs all CUDA executables on the same TSPLIB instances and parameter sets.
-- Add a shared build script/Makefile for CUDA targets to avoid manual `nvcc` commands.
-- Extend GPU-population GA beyond `MAX_CITIES=128` (current constant-memory constraint).
-- Add island migration and more advanced in-kernel selection/sorting strategies.
-- Record reproducible experiment runs (instance, seed, config, runtime, best tour length) in `results/`.
+The active optimization plan and final-report drafting work are tracked in two living documents:
+
+- [docs/optimization-roadmap.md](docs/optimization-roadmap.md)
+- [docs/report/report.md](docs/report/report.md)
+
+### 10.1 Optimization To-Do
+
+Current optimization work is organized into four stages.
+
+Stage 1: high-ROI fixes
+- Eliminate shared-memory bank conflicts with stride padding (`stride = n + 1`).
+- Remove local-memory spills in OX crossover by replacing `used[MAX_CITIES]` with a 128-bit bitmask.
+- Replace the thread-0 serialized elite sort with a warp-shuffle top-k reduction.
+- Benchmark constant-memory distance lookup against global `__restrict__` distance lookup.
+
+Stage 2: structural improvements
+- Add parallel 2-opt refinement for elite tours inside the island kernel.
+- Prototype warp-level parallel tour evaluation (`1 warp = 1 individual`).
+
+Stage 3: architectural experiments
+- Implement a warp-per-individual kernel variant.
+- Implement a packed 2-islands-per-block kernel variant.
+
+Stage 4: scaling experiments
+- Add island migration.
+- Remove the `MAX_CITIES = 128` limitation and support larger instances.
+
+### 10.2 Profiling and Benchmark To-Do
+
+- Collect TSPLIB benchmark instances: `berlin52.tsp`, `kroA100.tsp`, `ch130.tsp`, `d198.tsp`.
+- Run the CUDA tool audit on HPC and record available tools (`nvprof`, `ncu`, `nsys`, `compute-sanitizer`).
+- Add `cudaEvent_t` timing wrappers to all CUDA binaries before optimization experiments.
+- Run E1: implementation comparison (CPU-only, hybrid CUDA-GA, GPU-resident island GA).
+- Run E5: optimization version story (V0 through V5).
+- Run E6: 2-opt interval sweep.
+
+### 10.3 Report Working Files
+
+The report work is split across:
+
+- [docs/report/report.md](docs/report/report.md): living final report with section status tracker, writing checklist, experiment tables, and references.
+- [docs/optimization-roadmap.md](docs/optimization-roadmap.md): implementation playbook tying bottlenecks to code locations, mathematical claims, profiling commands, and staged fixes.
+
+Current report status summary:
+
+- Write-now sections: Introduction, Background, Implementation Arc, Profiling Protocol, 2-opt design, References.
+- Needs-data sections: Abstract, Optimization Story, Discussion, Conclusion.
+- Experiment-pending section: Experimental Results.
+
+### 10.4 Immediate Next Actions
+
+1. Add kernel timing instrumentation to `CUDA-GA.cu` and `CUDA-GA-GPU-Pop.cu`.
+2. Collect profiler baselines for the current GPU-population kernel.
+3. Implement Stage 1 fixes in `CUDA-GA-GPU-Pop.cu` one at a time and benchmark each version.
+4. Fill the corresponding experiment tables in [docs/report/report.md](docs/report/report.md) after each HPC run.
 
 ---
 
