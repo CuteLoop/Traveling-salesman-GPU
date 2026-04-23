@@ -1,0 +1,28 @@
+Compilation:
+nvcc -O3 -std=c++11 CUDA-GA-GPU-Pop.cu tsplib_parser.cpp -o tsp_gpu_pop 
+
+Usage:
+  ./tsp_gpu_pop <file.tsp> [islands=128] [generations=1000] [mutation_rate=0.05] [elite_count=2] [seed=auto]
+
+Arguments:
+  file.tsp
+      TSPLIB-format input instance.
+
+  islands
+      Number of independent GPU GA islands, mapped to CUDA blocks.
+      Default: 128
+
+  generations
+      Number of GA generations to run per island.
+      Default: 1000
+
+  mutation_rate
+      Swap-mutation probability per child.
+      Must be between 0 and 1.
+      Default: 0.05
+
+  elite_count
+      Number of best tours copied unchanged per island per generation.
+      Must be at least 1 and less than 32.
+      Default: 2
+
