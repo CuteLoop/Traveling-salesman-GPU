@@ -10,6 +10,7 @@
  */
 
 #include "mutation.h"
+#include <stddef.h>
 
 /* ---- mutate_swap ------------------------------------------------------ */
 

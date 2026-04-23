@@ -20,8 +20,20 @@ echo "PWD: $(pwd)"
 which nvcc || true
 nvcc --version || true
 
-make clean
-make -j4
+HOST_CC="gcc"
+if ! command -v "$HOST_CC" >/dev/null 2>&1; then
+	echo "Warning: gcc not found, using default make compiler selection"
+	HOST_CC=""
+fi
+
+if [[ -n "$HOST_CC" ]]; then
+	echo "Using host C compiler: $HOST_CC"
+	make clean CC="$HOST_CC"
+	make -j4 CC="$HOST_CC"
+else
+	make clean
+	make -j4
+fi
 
 echo "=== Build complete ==="
 ls -lh build

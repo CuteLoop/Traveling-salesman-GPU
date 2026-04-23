@@ -330,6 +330,7 @@ Why: this keeps jobs portable across partitions and avoids hard failures due to 
 
 - Sequential C build uses `gcc` with `-std=c11`.
 - CUDA builds use `nvcc` with `-std=c++11 -Xcompiler -std=gnu++11`.
+- `build.sh` explicitly invokes `make` with `CC=gcc` when `gcc` is available.
 
 Why: this is compatible with older host GCC toolchains commonly found on shared HPC systems while still supporting current CUDA code (`chrono`, `nullptr`, modern STL usage).
 
