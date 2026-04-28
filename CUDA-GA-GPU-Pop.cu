@@ -375,6 +375,7 @@ int main(int argc, char* argv[]) {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
 
+        std::cout << "VERSION: GPU-Pop Control\n";
         std::cout << "NAME: " << inst.name << "\n";
         std::cout << "TYPE: " << inst.type << "\n";
         std::cout << "DIMENSION: " << inst.dimension << "\n";

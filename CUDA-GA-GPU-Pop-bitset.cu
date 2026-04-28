@@ -15,11 +15,12 @@
 // - one CUDA block is one isolated GA island
 // - each island stores two populations in shared memory
 // - the full edge-weight matrix lives in constant memory
-// Variant 1:
-// - pad each shared-memory tour row to break worst-case bank-conflict strides
+// Variant 2:
+// - replace per-thread used[MAX_CITIES] scratch with a compact bitset
 constexpr int MAX_CITIES = 128;
 constexpr int BLOCK_POP_SIZE = 32;
 constexpr int TOURNAMENT_SIZE = 3;
+constexpr int USED_WORDS = (MAX_CITIES + 31) / 32;
 
 __constant__ int c_dist[MAX_CITIES * MAX_CITIES];
 
@@ -44,10 +45,6 @@ struct GaConfig {
     int elite_count = 2;
     unsigned int seed = 0;
 };
-
-__host__ __device__ constexpr int padded_tour_stride(int n) {
-    return n + 1;
-}
 
 __device__ unsigned int xorshift32(unsigned int& state) {
     state ^= state << 13;
@@ -101,6 +98,21 @@ __device__ int tournament_select_device(const int* lengths,
     return best;
 }
 
+__device__ inline void bitset_clear(uint32_t* used) {
+    #pragma unroll
+    for (int i = 0; i < USED_WORDS; ++i) {
+        used[i] = 0u;
+    }
+}
+
+__device__ inline void bitset_set(uint32_t* used, int city) {
+    used[city >> 5] |= (1u << (city & 31));
+}
+
+__device__ inline bool bitset_test(const uint32_t* used, int city) {
+    return (used[city >> 5] & (1u << (city & 31))) != 0u;
+}
+
 __device__ void order_crossover_device(const int* parent_a,
                                        const int* parent_b,
                                        int* child,
@@ -114,24 +126,25 @@ __device__ void order_crossover_device(const int* parent_a,
         right = tmp;
     }
 
-    int used[MAX_CITIES];
+    uint32_t used[USED_WORDS];
+    bitset_clear(used);
+
     for (int i = 0; i < n; ++i) {
         child[i] = -1;
-        used[i] = 0;
     }
 
     for (int i = left; i <= right; ++i) {
         child[i] = parent_a[i];
-        used[parent_a[i]] = 1;
+        bitset_set(used, parent_a[i]);
     }
 
     int out = (right + 1) % n;
     for (int offset = 1; offset <= n; ++offset) {
         int gene = parent_b[(right + offset) % n];
-        if (used[gene]) continue;
+        if (bitset_test(used, gene)) continue;
 
         child[out] = gene;
-        used[gene] = 1;
+        bitset_set(used, gene);
         out = (out + 1) % n;
     }
 }
@@ -154,7 +167,6 @@ __device__ void mutate_swap_device(int* tour,
 }
 
 __global__ void ga_island_kernel(int n,
-                                 int tour_stride,
                                  int generations,
                                  float mutation_rate,
                                  int elite_count,
@@ -167,8 +179,8 @@ __global__ void ga_island_kernel(int n,
     const int island = blockIdx.x;
 
     int* pop_a = shared;
-    int* pop_b = pop_a + BLOCK_POP_SIZE * tour_stride;
-    int* lengths = pop_b + BLOCK_POP_SIZE * tour_stride;
+    int* pop_b = pop_a + BLOCK_POP_SIZE * n;
+    int* lengths = pop_b + BLOCK_POP_SIZE * n;
     int* order = lengths + BLOCK_POP_SIZE;
 
     unsigned int rng = seed ^
@@ -177,7 +189,7 @@ __global__ void ga_island_kernel(int n,
     if (rng == 0) rng = 1;
 
     if (tid < BLOCK_POP_SIZE) {
-        init_random_tour(pop_a + tid * tour_stride, n, rng);
+        init_random_tour(pop_a + tid * n, n, rng);
     }
     __syncthreads();
 
@@ -186,7 +198,7 @@ __global__ void ga_island_kernel(int n,
 
     for (int generation = 0; generation < generations; ++generation) {
         if (tid < BLOCK_POP_SIZE) {
-            lengths[tid] = tour_length_const(current + tid * tour_stride, n);
+            lengths[tid] = tour_length_const(current + tid * n, n);
         }
         __syncthreads();
 
@@ -212,18 +224,16 @@ __global__ void ga_island_kernel(int n,
 
         if (tid < elite_count) {
             const int elite_idx = order[tid];
-            const int* elite = current + elite_idx * tour_stride;
-            int* child = next + tid * tour_stride;
             for (int k = 0; k < n; ++k) {
-                child[k] = elite[k];
+                next[tid * n + k] = current[elite_idx * n + k];
             }
         } else if (tid < BLOCK_POP_SIZE) {
             const int parent_a_idx = tournament_select_device(lengths, rng);
             const int parent_b_idx = tournament_select_device(lengths, rng);
 
-            const int* parent_a = current + parent_a_idx * tour_stride;
-            const int* parent_b = current + parent_b_idx * tour_stride;
-            int* child = next + tid * tour_stride;
+            const int* parent_a = current + parent_a_idx * n;
+            const int* parent_b = current + parent_b_idx * n;
+            int* child = next + tid * n;
 
             order_crossover_device(parent_a, parent_b, child, n, rng);
             mutate_swap_device(child, n, mutation_rate, rng);
@@ -237,7 +247,7 @@ __global__ void ga_island_kernel(int n,
     }
 
     if (tid < BLOCK_POP_SIZE) {
-        lengths[tid] = tour_length_const(current + tid * tour_stride, n);
+        lengths[tid] = tour_length_const(current + tid * n, n);
     }
     __syncthreads();
 
@@ -250,9 +260,8 @@ __global__ void ga_island_kernel(int n,
         }
 
         best_lengths[island] = lengths[best_idx];
-        const int* best_tour = current + best_idx * tour_stride;
         for (int k = 0; k < n; ++k) {
-            best_tours[island * n + k] = best_tour[k];
+            best_tours[island * n + k] = current[best_idx * n + k];
         }
     }
 }
@@ -301,7 +310,6 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
         throw std::runtime_error("TSP dimension exceeds MAX_CITIES for constant memory");
     }
 
-    const int tour_stride = padded_tour_stride(n);
     const unsigned int seed = cfg.seed == 0
         ? static_cast<unsigned int>(
               std::chrono::high_resolution_clock::now().time_since_epoch().count())
@@ -322,13 +330,12 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMalloc(&d_best_lengths, best_lengths_bytes));
 
     const size_t shared_ints =
-        2 * static_cast<size_t>(BLOCK_POP_SIZE) * tour_stride +
+        2 * static_cast<size_t>(BLOCK_POP_SIZE) * n +
         2 * static_cast<size_t>(BLOCK_POP_SIZE);
     const size_t shared_bytes = sizeof(int) * shared_ints;
 
     ga_island_kernel<<<cfg.islands, BLOCK_POP_SIZE, shared_bytes>>>(
         n,
-        tour_stride,
         cfg.generations,
         cfg.mutation_rate,
         cfg.elite_count,
@@ -386,9 +393,8 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        const int tour_stride = padded_tour_stride(inst.dimension);
 
-        std::cout << "VERSION: GPU-Pop Bank-Conflict Variant\n";
+        std::cout << "VERSION: GPU-Pop Bitset Variant\n";
         std::cout << "NAME: " << inst.name << "\n";
         std::cout << "TYPE: " << inst.type << "\n";
         std::cout << "DIMENSION: " << inst.dimension << "\n";
@@ -398,7 +404,6 @@ int main(int argc, char* argv[]) {
         std::cout << "Generations: " << cfg.generations << "\n";
         std::cout << "Mutation rate: " << cfg.mutation_rate << "\n";
         std::cout << "Elite count per island: " << cfg.elite_count << "\n";
-        std::cout << "Shared-memory row stride: " << tour_stride << "\n";
 
         TourResult best = run_gpu_population_ga(inst, cfg);
 
