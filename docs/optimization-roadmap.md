@@ -61,6 +61,9 @@ bank(t, k) = (t × 128 + k) % 32
 ```
 The bank index is **independent of thread index t**. Every thread in the warp hits the same bank at the same instruction — a 32-way bank conflict. The hardware serializes these 32 accesses into 32 sequential transactions.
 
+
+
+
 **Throughput consequence:**  
 Ideal shared memory: 1 transaction/cycle. With 32-way conflict: 32 transactions/cycle-slot → **32× slower** for every population read/write.
 
