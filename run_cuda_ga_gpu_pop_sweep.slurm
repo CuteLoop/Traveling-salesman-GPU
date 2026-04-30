@@ -33,7 +33,7 @@ if [ ! -x ./build/CUDA-GA-GPU-Pop ] ||
    [ ! -x ./build/GA-GPU-POP-AoS ] ||
    [ ! -x ./build/GA-GPU-POP-GlobalDist ]; then
   echo "One or more GPU-pop binaries not found, building first..."
-  bash ./build.sh
+  bash ./scripts/build.sh
 fi
 
 # Edit these arrays to control the sweep size. The defaults change one input
