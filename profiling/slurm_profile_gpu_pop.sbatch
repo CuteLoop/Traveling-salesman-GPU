@@ -14,10 +14,10 @@ module load cuda
 
 mkdir -p profiling/runs
 
-nvcc -O3 -std=c++11 -lineinfo CUDA-GA-GPU-Pop.cu tsplib_parser.cpp -o tsp_gpu_pop
+nvcc -O3 -std=c++11 -lineinfo -Isrc/cpp src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp -o tsp_gpu_pop
 
 # If running specifically on P100 nodes, use this instead:
-# nvcc -O3 -std=c++11 -lineinfo -arch=sm_60 CUDA-GA-GPU-Pop.cu tsplib_parser.cpp -o tsp_gpu_pop
+# nvcc -O3 -std=c++11 -lineinfo -arch=sm_60 -Isrc/cpp src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp -o tsp_gpu_pop
 
 INPUT="${1:?Usage: sbatch profiling/slurm_profile_gpu_pop.sbatch <file.tsp> [islands] [generations] [mutation_rate] [elite_count] [seed]}"
 ISLANDS="${2:-128}"

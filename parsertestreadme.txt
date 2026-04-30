@@ -19,7 +19,7 @@ inst.dist = {
 };
 
 Usage:
-g++ -std=c++17 ParsertestMain.cpp tsplib_parser.cpp -o tsp_test
+g++ -std=c++17 -Isrc/cpp src/cpp/tests/ParsertestMain.cpp src/cpp/tsplib_parser.cpp -o tsp_test
 ./tsp_test <file.tsp>
 ./tsp_test berlin52.tsp
 

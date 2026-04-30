@@ -1,6 +1,6 @@
 # CUDA Profiling Baseline
 
-This directory contains a repeatable profiling setup for `CUDA-GA-GPU-Pop.cu`.
+This directory contains a repeatable profiling setup for `src/cuda/CUDA-GA-GPU-Pop.cu`.
 Use it to capture a baseline before changing kernels or memory behavior.
 
 ## Build
@@ -8,13 +8,13 @@ Use it to capture a baseline before changing kernels or memory behavior.
 Compile with optimization and line information:
 
 ```bash
-nvcc -O3 -std=c++11 -lineinfo CUDA-GA-GPU-Pop.cu tsplib_parser.cpp -o tsp_gpu_pop
+nvcc -O3 -std=c++11 -lineinfo -Isrc/cpp src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp -o tsp_gpu_pop
 ```
 
 For P100 nodes, add the P100 architecture target:
 
 ```bash
-nvcc -O3 -std=c++11 -lineinfo -arch=sm_60 CUDA-GA-GPU-Pop.cu tsplib_parser.cpp -o tsp_gpu_pop
+nvcc -O3 -std=c++11 -lineinfo -arch=sm_60 -Isrc/cpp src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp -o tsp_gpu_pop
 ```
 
 `-lineinfo` keeps enough source-location metadata for profilers without turning off optimization.

@@ -1,9 +1,12 @@
 #!/bin/bash
 set -euo pipefail
 
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_DIR"
+
 if [[ ! -f Makefile ]]; then
-	echo "Error: top-level Makefile not found in $(pwd)"
-	echo "Run this script from the repository root after pulling latest changes."
+	echo "Error: top-level Makefile not found in $REPO_DIR"
 	exit 1
 fi
 

@@ -21,15 +21,19 @@ else
   module load cuda11/11.0
 fi
 
-REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/Makefile" ]; then
+  REPO_DIR="${SLURM_SUBMIT_DIR}"
+fi
 cd "$REPO_DIR"
 
-DATASET="sequential/tests/fixtures/smoke_20.tsp"
+DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
 mkdir -p results
 
 if [ ! -x ./build/GPU-Naive ]; then
   echo "GPU-Naive binary not found, building first..."
-  bash ./build.sh
+  bash ./scripts/build.sh
 fi
 
 OUT_TXT="results/gpu_naive_${SLURM_JOB_ID}.txt"
