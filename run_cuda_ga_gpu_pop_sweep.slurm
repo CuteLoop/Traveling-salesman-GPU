@@ -29,7 +29,9 @@ mkdir -p results
 if [ ! -x ./build/CUDA-GA-GPU-Pop ] ||
    [ ! -x ./build/CUDA-GA-GPU-Pop-bankconflict ] ||
    [ ! -x ./build/CUDA-GA-GPU-Pop-bitset ] ||
-   [ ! -x ./build/GA-GPU-POP-ParallelSort ]; then
+   [ ! -x ./build/GA-GPU-POP-ParallelSort ] ||
+   [ ! -x ./build/GA-GPU-POP-AoS ] ||
+   [ ! -x ./build/GA-GPU-POP-GlobalDist ]; then
   echo "One or more GPU-pop binaries not found, building first..."
   bash ./build.sh
 fi
@@ -46,6 +48,8 @@ VARIANTS=(
   "bankconflict:./build/CUDA-GA-GPU-Pop-bankconflict"
   "bitset:./build/CUDA-GA-GPU-Pop-bitset"
   "parallel_sort:./build/GA-GPU-POP-ParallelSort"
+  "aos:./build/GA-GPU-POP-AoS"
+  "global_dist:./build/GA-GPU-POP-GlobalDist"
 )
 
 SEEDS=(42 1337 2026)
