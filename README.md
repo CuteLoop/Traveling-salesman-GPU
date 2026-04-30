@@ -11,8 +11,8 @@ The project follows a structured progression: **Python baseline → sequential C
 |-------|--------|-------------|
 | **1. Python baseline** | ✅ Done | pyCombinatorial (GA, ACO, Hilbert SFC) — correctness reference |
 | **2. Sequential C** | ✅ Done | Single-threaded C99 GA with tests, regression checks, and benchmarking |
-| **3. Naive GPU (CUDA)** | ✅ Done | CUDA baseline (`GPU-Naive.cu`) for parallel tour-length evaluation |
-| **4. GPU GA variants (CUDA)** | ✅ In Progress | Hybrid host+GPU GA (`CUDA-GA.cu`) and GPU island model (`CUDA-GA-GPU-Pop.cu`) |
+| **3. Naive GPU (CUDA)** | ✅ Done | CUDA baseline (`src/cuda/GPU-Naive.cu`) for parallel tour-length evaluation |
+| **4. GPU GA variants (CUDA)** | ✅ In Progress | Hybrid host+GPU GA (`src/cuda/CUDA-GA.cu`) and GPU island model (`src/cuda/CUDA-GA-GPU-Pop.cu`) |
 
 The Python baseline is the ground truth. Every subsequent implementation must produce tours within an acceptable tolerance of the Python results before moving forward.
 
@@ -44,13 +44,21 @@ The Python baseline is the ground truth. Every subsequent implementation must pr
 │   ├── py_combinatorial_ga_example_berlin52.py
 │   └── pycombinatorial_latlong_compare.py   # ACO / GA / Hilbert SFC on Madeira dataset
 ├── sequential/                       # Sequential C99 GA implementation
-├── GPU-Naive.cu                      # Naive CUDA tour-length evaluation
-├── CUDA-GA.cu                        # Hybrid GA: CPU evolution + GPU fitness
-├── CUDA-GA-GPU-Pop.cu                # GPU island-model GA
-├── tsplib_parser.cpp/.h              # TSPLIB parser used by C/CUDA executables
+├── src/
+│   ├── cuda/                         # CUDA implementations
+│   │   ├── GPU-Naive.cu
+│   │   ├── CUDA-GA.cu
+│   │   ├── CUDA-GA-GPU-Pop.cu
+│   │   └── variants/                 # Optimization variants (B1/B2/B3/B4 + legacy)
+│   └── cpp/
+│       ├── tsplib_parser.cpp
+│       └── tsplib_parser.h
+├── slurm/                            # HPC job scripts
+├── scripts/                          # Build helpers for HPC/local
 ├── tests/                            # Pytest test suite
 │   └── test_pycombinatorial_ga.py
 ├── docs/                             # Technical notes and CUDA implementation docs
+│   └── optimizations/                # B1/B2/B3/B4 explainers
 ├── results/                          # Output CSVs and HTML maps (git-ignored)
 ├── img/
 │   └── flow-chart.png
@@ -249,24 +257,28 @@ Prerequisites:
 - NVIDIA GPU + driver
 - CUDA Toolkit with `nvcc` in PATH
 
-From repository root, compile each executable by linking its `.cu` file with `tsplib_parser.cpp`.
+From repository root, compile each executable by linking its `.cu` file with `src/cpp/tsplib_parser.cpp` and include path `-Isrc/cpp`.
 
 ### 8.1 Build CUDA executables
 
 Linux/macOS:
 
 ```bash
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o GPU-Naive GPU-Naive.cu tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA CUDA-GA.cu tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA-GPU-Pop CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o GPU-Naive src/cuda/GPU-Naive.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA src/cuda/CUDA-GA.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bankconflict src/cuda/variants/CUDA-GA-GPU-Pop-bankconflict.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bitset src/cuda/variants/CUDA-GA-GPU-Pop-bitset.cu src/cpp/tsplib_parser.cpp
 ```
 
 Windows PowerShell:
 
 ```powershell
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o GPU-Naive.exe GPU-Naive.cu tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA.exe CUDA-GA.cu tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -o CUDA-GA-GPU-Pop.exe CUDA-GA-GPU-Pop.cu tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o GPU-Naive.exe src/cuda/GPU-Naive.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA.exe src/cuda/CUDA-GA.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop.exe src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bankconflict.exe src/cuda/variants/CUDA-GA-GPU-Pop-bankconflict.cu src/cpp/tsplib_parser.cpp
+nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bitset.exe src/cuda/variants/CUDA-GA-GPU-Pop-bitset.cu src/cpp/tsplib_parser.cpp
 ```
 
 If your GPU is not Pascal/P100, adjust `-arch=sm_60` to your compute capability.
@@ -321,7 +333,7 @@ The cluster workflow is tuned for an HPC stack where `cuda11/11.8` is available 
 
 ### Module decision
 
-- `build.sh` and `run_tsp.slurm` now prefer `cuda11/11.8`.
+- `scripts/build.sh` and `slurm/run_tsp.slurm` now prefer `cuda11/11.8`.
 - If `cuda11/11.8` is not present on a node, scripts fall back to `cuda11/11.0`.
 
 Why: this keeps jobs portable across partitions and avoids hard failures due to site-specific module naming.
@@ -330,7 +342,7 @@ Why: this keeps jobs portable across partitions and avoids hard failures due to 
 
 - Sequential C build uses `gcc` with `-std=c11`.
 - CUDA builds use `nvcc` with `-std=c++11 -Xcompiler -std=gnu++11`.
-- `build.sh` explicitly invokes `make` with `CC=gcc` when `gcc` is available.
+- `scripts/build.sh` explicitly invokes `make` with `CC=gcc` when `gcc` is available.
 
 Why: this is compatible with older host GCC toolchains commonly found on shared HPC systems while still supporting current CUDA code (`chrono`, `nullptr`, modern STL usage).
 
@@ -339,14 +351,27 @@ Why: this is compatible with older host GCC toolchains commonly found on shared 
 From repository root:
 
 ```bash
-chmod +x build.sh
-./build.sh
+chmod +x scripts/build.sh
+./scripts/build.sh
 ```
 
 Submit benchmark job:
 
 ```bash
-sbatch run_tsp.slurm
+sbatch slurm/run_tsp.slurm
+```
+
+Build only CUDA GA-Pop variants:
+
+```bash
+make build/CUDA-GA-GPU-Pop-bankconflict
+make build/CUDA-GA-GPU-Pop-bitset
+```
+
+Build all CUDA versions (base + optimization variants):
+
+```bash
+make all_cuda_versions
 ```
 
 ### HPC workflow: submit, monitor, and collect results
@@ -363,26 +388,22 @@ git pull
 2. Ensure the Slurm script points to your checkout path:
 
 ```bash
-nano run_tsp.slurm
+nano slurm/run_tsp.slurm
 ```
 
-Set `REPO_DIR` in `run_tsp.slurm` to your actual path, for example:
-
-```bash
-REPO_DIR=/home/u16/<your-username>/Traveling-salesman-GPU
-```
+`slurm/run_tsp.slurm` auto-detects the repository root from script location (or from `SLURM_SUBMIT_DIR` when valid), so no manual `REPO_DIR` edit is required.
 
 3. Build once interactively (sanity check):
 
 ```bash
-chmod +x build.sh
-./build.sh
+chmod +x scripts/build.sh
+./scripts/build.sh
 ```
 
 4. Submit the job:
 
 ```bash
-sbatch run_tsp.slurm
+sbatch slurm/run_tsp.slurm
 ```
 
 If outputs do not appear in your current `results/` folder, check that the job is running from your current checkout. The scripts now use `SLURM_SUBMIT_DIR` (the directory where you run `sbatch`) so outputs land in that same repo.
@@ -392,11 +413,37 @@ If outputs do not appear in your current `results/` folder, check that the job i
 From repository root:
 
 ```bash
-sbatch run_sequential.slurm
-sbatch run_gpu_naive.slurm
-sbatch run_cuda_ga.slurm
-sbatch run_cuda_ga_gpu_pop.slurm
+sbatch slurm/run_sequential.slurm
+sbatch slurm/run_gpu_naive.slurm
+sbatch slurm/run_cuda_ga.slurm
+sbatch slurm/run_cuda_ga_gpu_pop.slurm
+sbatch slurm/run_cuda_ga_gpu_pop_bankconflict.slurm
+sbatch slurm/run_cuda_ga_gpu_pop_bitset.slurm
 ```
+
+### Submit one matrix job for all CUDA versions
+
+From repository root:
+
+```bash
+# smoke_20 for all CUDA implementations
+make sbatch_cuda_smoke20
+
+# berlin52 for all CUDA implementations
+make sbatch_cuda_berlin52
+```
+
+Equivalent explicit Slurm commands:
+
+```bash
+sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp slurm/run_cuda_all_variants.slurm
+sbatch --export=ALL,DATASET=data/berlin52.tsp slurm/run_cuda_all_variants.slurm
+```
+
+The matrix script writes files like:
+
+- `results/cuda_ga_b3_shuffle_smoke_20_<jobid>.txt`
+- `results/cuda_ga_b4_global_berlin52_<jobid>.txt`
 
 Each job writes result files with the Slurm job ID suffix, for example:
 
@@ -405,6 +452,8 @@ Each job writes result files with the Slurm job ID suffix, for example:
 - `results/gpu_naive_<jobid>.txt`
 - `results/cuda_ga_<jobid>.txt`
 - `results/cuda_ga_gpu_pop_<jobid>.txt`
+- `results/cuda_ga_gpu_pop_bankconflict_<jobid>.txt`
+- `results/cuda_ga_gpu_pop_bitset_<jobid>.txt`
 
 5. Monitor queue status:
 

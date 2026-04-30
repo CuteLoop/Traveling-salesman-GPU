@@ -21,8 +21,14 @@ else
   module load cuda11/11.0
 fi
 
-# Use the directory where sbatch was invoked.
-REPO_DIR="${SLURM_SUBMIT_DIR:-$PWD}"
+# Prefer repository root resolved from this script location.
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+
+# If sbatch was invoked from a valid repo checkout, prefer it.
+if [ -n "${SLURM_SUBMIT_DIR:-}" ] && [ -f "${SLURM_SUBMIT_DIR}/Makefile" ]; then
+  REPO_DIR="${SLURM_SUBMIT_DIR}"
+fi
 cd "$REPO_DIR"
 
 echo "=== Host / GPU info ==="
@@ -30,14 +36,14 @@ hostname
 nvidia-smi || true
 
 echo "=== Building ==="
-bash ./build.sh
+bash ./scripts/build.sh
 
 # Verified dataset in this repo (adjust if you prefer another .tsp)
 DATASET="sequential/tests/fixtures/smoke_20.tsp"
 
 if [ ! -f "$DATASET" ]; then
     echo "Error: dataset '$DATASET' not found in $REPO_DIR"
-  echo "Update DATASET in run_tsp.slurm to a valid .tsp path."
+  echo "Update DATASET in slurm/run_tsp.slurm to a valid .tsp path."
     exit 1
 fi
 

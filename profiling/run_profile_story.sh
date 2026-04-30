@@ -46,8 +46,8 @@ MUT=0.05
 SEED=42
 N_REPS=10                 # repetitions per experiment cell
 OUT_DIR=./profile_results
-SRC=CUDA-GA-GPU-Pop.cu
-PARSER=tsplib_parser.cpp
+SRC=src/cuda/CUDA-GA-GPU-Pop.cu
+PARSER=src/cpp/tsplib_parser.cpp
 
 mkdir -p "$OUT_DIR"
 

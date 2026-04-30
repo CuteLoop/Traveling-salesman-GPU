@@ -307,6 +307,8 @@ __device__ void find_top2_warp(const int* lengths,
     }
 }
 ```
+
+
 **Steps: 2 × 5 shuffle iterations = 10 warp-synchronous steps.**  
 No `__syncthreads()` needed (shuffle is warp-synchronous). No shared memory used.
 
@@ -826,7 +828,7 @@ Requires a different GA loop structure.
 | A + 2-opt (K=10) | 32 | 1 | ~1.56% | (measure) | (measure) | (measure) |
 | A + 2-opt (K=1) | 32 | 1 | ~1.56% | (measure) | (measure) | (measure) |
 
----
+--- 
 
 ## Part 5 — Experimental Design and Benchmark Tables
 
