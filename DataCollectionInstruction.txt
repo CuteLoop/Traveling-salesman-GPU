@@ -1,10 +1,11 @@
-Traveling-salesman-GPU Data Collection Instructions
-===================================================
+Build and CSV Data Collection Instructions
+==========================================
 
 Purpose
 -------
-These steps describe how to collect benchmark data on the HPC cluster for the
-current CUDA variants, including the single-CSV collection job.
+This file covers only:
+1. building the project
+2. running the CSV-based CUDA data collection job
 
 
 1. Go to the repository
@@ -12,118 +13,100 @@ current CUDA variants, including the single-CSV collection job.
 cd ~/Traveling-salesman-GPU
 
 
-2. Sync to the working version
-------------------------------
-If you want the latest pushed main branch:
-
-git fetch origin
-git checkout main
-git reset --hard origin/main
-git clean -fdx
-
-If the checkout is already clean and current, a normal pull is enough:
+2. Sync to the version you want to test
+---------------------------------------
+If needed:
 
 git checkout main
 git pull
 
-
-3. Record the exact code version used for the experiment
---------------------------------------------------------
-Save the commit hash before running jobs:
+Optional: record the exact commit used for the experiment:
 
 git rev-parse HEAD
 git rev-parse --short HEAD
 
-Also note:
-- branch name
-- job ID
-- dataset
-- Slurm script used
-- CUDA module version
-- key parameters
 
-
-4. Build the binaries
----------------------
-From the repository root:
+3. Build the project
+--------------------
+Run:
 
 bash scripts/build.sh
 
-This script loads CUDA, builds the project, and places binaries in build/.
+This should build the binaries into:
+
+build/
 
 
-5. Useful one-off sanity runs
------------------------------
-Basic GPU-pop control version:
-
-./build/CUDA-GA-GPU-Pop sequential/tests/fixtures/smoke_20.tsp 128 1000 0.05 2 42
-
-Berlin52 example:
-
-./build/CUDA-GA-GPU-Pop data/berlin52.tsp 128 1000 0.05 2 42
-
-
-6. Submit one-job-per-implementation runs
------------------------------------------
-Submit individual jobs:
-
-sbatch slurm/run_sequential.slurm
-sbatch slurm/run_gpu_naive.slurm
-sbatch slurm/run_cuda_ga.slurm
-sbatch slurm/run_cuda_ga_gpu_pop.slurm
-sbatch slurm/run_cuda_ga_gpu_pop_bankconflict.slurm
-sbatch slurm/run_cuda_ga_gpu_pop_bitset.slurm
-
-To force a dataset when the script supports DATASET:
-
-sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp slurm/run_cuda_ga_gpu_pop.slurm
-sbatch --export=ALL,DATASET=data/berlin52.tsp slurm/run_cuda_ga_gpu_pop.slurm
-
-
-7. Submit the all-variants comparison job
------------------------------------------
-This runs the CUDA variants and writes separate result files under results/:
-
-sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp slurm/run_cuda_all_variants.slurm
-sbatch --export=ALL,DATASET=data/berlin52.tsp slurm/run_cuda_all_variants.slurm
-
-Expected outputs:
-- run_cuda_all_variants_<jobid>.out
-- run_cuda_all_variants_<jobid>.error
-- results/<variant>_<dataset>_<jobid>.txt
-
-
-8. Submit the single-CSV all-variants collector
------------------------------------------------
-This is the preferred job when you want one CSV instead of many text files.
-
-Smoke 20:
+4. Submit the CSV data collection job
+------------------------------------
+Smoke 20, 10 runs:
 
 sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
 
-Berlin52:
+Berlin52, 10 runs:
 
 sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
 
-Optional overrides:
-- RUNS=10
-- ISLANDS=128
-- GENERATIONS=1000
-- MUTATION=0.05
-- ELITE_POP=2
-- ELITE_HYBRID=4
-- SEED_BASE=42
-- POP_HYBRID=512
 
-Example with explicit overrides:
+5. Optional parameter overrides
+-------------------------------
+You can override:
 
-sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10,GENERATIONS=1000,ISLANDS=128,MUTATION=0.05,ELITE_POP=2,ELITE_HYBRID=4,SEED_BASE=42 slurm/run_cuda_all_variants_csv.slurm
+- RUNS
+- ISLANDS
+- GENERATIONS
+- MUTATION
+- ELITE_POP
+- ELITE_HYBRID
+- SEED_BASE
+- POP_HYBRID
 
-CSV output location:
+Example:
+
+sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10,ISLANDS=128,GENERATIONS=1000,MUTATION=0.05,ELITE_POP=2,ELITE_HYBRID=4,SEED_BASE=42 slurm/run_cuda_all_variants_csv.slurm
+
+
+6. Output files
+---------------
+Slurm log files:
+
+run_cuda_all_variants_csv_<jobid>.out
+run_cuda_all_variants_csv_<jobid>.error
+
+CSV data file:
 
 results/cuda_all_variants_<dataset>_<jobid>.csv
 
+
+7. Monitor the job
+------------------
+Check queue status:
+
+squeue -j <jobid>
+
+Watch logs:
+
+tail -f run_cuda_all_variants_csv_<jobid>.out
+tail -f run_cuda_all_variants_csv_<jobid>.error
+
+
+8. Inspect the CSV
+------------------
+Preview:
+
+head -5 results/cuda_all_variants_berlin52_<jobid>.csv
+
+Check for failures or skips:
+
+grep -n "failed\|skipped" results/cuda_all_variants_berlin52_<jobid>.csv
+
+
+9. What the CSV contains
+------------------------
+Each row corresponds to one run of one variant.
+
 Columns include:
+
 - variant
 - binary
 - version
@@ -142,91 +125,7 @@ Columns include:
 - notes
 
 Note:
-max_rss_kb is host RAM usage from /usr/bin/time. It is not GPU memory.
 
-
-9. Submit the GPU-pop parameter sweep
--------------------------------------
-This script runs multiple datasets, variants, and parameter cases and writes a
-summary CSV.
-
-sbatch run_cuda_ga_gpu_pop_sweep.slurm
-
-Expected summary:
-
-results/cuda_ga_gpu_pop_sweep_<jobid>/summary.csv
-
-
-10. Submit the profiling baseline job
--------------------------------------
-For timing/profiler-oriented collection:
-
-sbatch profiling/slurm_profile_gpu_pop.sbatch sequential/tests/fixtures/smoke_20.tsp 128 1000 0.05 2 42
-
-
-11. Monitor jobs
-----------------
-Check queue status:
-
-squeue -u $USER
-squeue -j <jobid>
-
-Watch stdout/stderr:
-
-tail -f run_cuda_all_variants_<jobid>.out
-tail -f run_cuda_all_variants_<jobid>.error
-tail -f run_cuda_all_variants_csv_<jobid>.out
-tail -f run_cuda_all_variants_csv_<jobid>.error
-
-Accounting summary after completion:
-
-sacct -j <jobid> --format=JobID,JobName,Partition,State,Elapsed,MaxRSS,AllocTRES
-
-
-12. Inspect outputs
--------------------
-List result files:
-
-ls -lh results
-
-Inspect the CSV collector output:
-
-head -5 results/cuda_all_variants_berlin52_<jobid>.csv
-grep -n "failed\|skipped" results/cuda_all_variants_berlin52_<jobid>.csv
-
-
-13. Recommended experiment order
---------------------------------
-1. Build:
-   bash scripts/build.sh
-
-2. Small sanity pass:
-   sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=1 slurm/run_cuda_all_variants_csv.slurm
-
-3. Full smoke_20 collection:
-   sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
-
-4. Full berlin52 collection:
-   sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
-
-5. Parameter sweep:
-   sbatch run_cuda_ga_gpu_pop_sweep.slurm
-
-6. Profiling baseline:
-   sbatch profiling/slurm_profile_gpu_pop.sbatch sequential/tests/fixtures/smoke_20.tsp 128 1000 0.05 2 42
-
-
-14. Recommended notes to keep
------------------------------
-For every experiment, save:
-- commit hash
-- branch name
-- job ID
-- dataset
-- script name
-- date/time
-- CUDA module version
-- compile path used
-- output CSV or result file path
-- any warnings, skips, or failures
+max_rss_kb is CPU-side peak resident memory from /usr/bin/time.
+It is not GPU memory usage.
 
