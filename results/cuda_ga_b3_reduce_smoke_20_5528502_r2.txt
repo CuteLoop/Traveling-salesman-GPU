@@ -1,0 +1,7 @@
+VERSION: GPU-Pop B1+B2+B3-reduce
+NAME: smoke_20
+DIMENSION: 20
+Islands: 128
+Generations: 1000
+
+Best tour length: 73

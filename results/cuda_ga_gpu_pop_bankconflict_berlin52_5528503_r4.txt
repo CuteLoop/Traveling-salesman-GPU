@@ -1,0 +1,15 @@
+VERSION: GPU-Pop Bank-Conflict Variant
+NAME: BERLIN52
+TYPE: TSP
+DIMENSION: 52
+Islands: 128
+Island population: 32
+Total GPU population: 4096
+Generations: 1000
+Mutation rate: 0.05
+Elite count per island: 2
+Shared-memory row stride: 53
+
+Best GPU-population GA tour length: 9412
+Best tour (0-based indices):
+4 47 23 5 3 24 11 27 26 25 46 13 12 51 10 50 32 39 43 49 19 22 33 38 36 45 15 28 29 41 1 6 16 20 30 17 2 9 8 42 44 18 40 7 31 21 48 0 35 34 37 14 4

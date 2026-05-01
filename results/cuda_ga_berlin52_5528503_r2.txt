@@ -1,0 +1,32 @@
+NAME: BERLIN52
+TYPE: TSP
+DIMENSION: 52
+Population: 512
+Generations: 1000
+Mutation rate: 0.05
+Elite count: 4
+Generation 1 best = 8181, global best = 8181
+Generation 50 best = 8092, global best = 8092
+Generation 100 best = 7596, global best = 7596
+Generation 150 best = 7542, global best = 7542
+Generation 200 best = 7542, global best = 7542
+Generation 250 best = 7542, global best = 7542
+Generation 300 best = 7542, global best = 7542
+Generation 350 best = 7542, global best = 7542
+Generation 400 best = 7542, global best = 7542
+Generation 450 best = 7542, global best = 7542
+Generation 500 best = 7542, global best = 7542
+Generation 550 best = 7542, global best = 7542
+Generation 600 best = 7542, global best = 7542
+Generation 650 best = 7542, global best = 7542
+Generation 700 best = 7542, global best = 7542
+Generation 750 best = 7542, global best = 7542
+Generation 800 best = 7542, global best = 7542
+Generation 850 best = 7542, global best = 7542
+Generation 900 best = 7542, global best = 7542
+Generation 950 best = 7542, global best = 7542
+Generation 1000 best = 7542, global best = 7542
+
+Best GA tour length: 7542
+Best tour (0-based indices):
+1 29 22 19 49 28 15 45 43 33 34 35 38 39 36 37 47 23 4 14 5 3 24 11 27 26 25 46 12 13 51 10 50 32 42 9 8 7 40 18 44 31 48 0 21 30 17 2 16 20 41 6 1

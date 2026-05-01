@@ -1,0 +1,10 @@
+VERSION: GPU-Pop B1+B2+B3-shuffle+B4-smem
+NAME: smoke_20  DIMENSION: 20
+Islands: 128  Generations: 1000
+Shared memory breakdown for n=20:
+  population: 5632 bytes
+  s_dist:     1600 bytes
+  total:      7232 bytes (limit: 65536)
+Occupancy: 8 blocks/SM (12.5%)
+
+Best tour length: 73

@@ -1,0 +1,22 @@
+NAME: BERLIN52
+TYPE: TSP
+DIMENSION: 52
+First 15 matrix elements:
+0 666 281 396 291 326 641 427 600 561 1041 655 975 1121 299 
+
+Greedy nearest-neighbor result:
+Tour length: 8181
+Tour (0-based indices):
+39 37 36 38 35 34 33 43 45 47 23 4 14 5 3 24 11 27 26 25 46 12 13 51 10 50 32 42 9 8 7 40 18 44 31 48 0 21 30 17 2 16 20 22 19 49 15 28 29 41 6 1 39
+
+GPU tour length evaluation:
+Tour 0 GPU length = 8181
+Tour 1 GPU length = 8181
+Tour 2 GPU length = 8181
+Tour 3 GPU length = 8181
+
+CPU cross-check:
+Tour 0 CPU length = 8181, GPU length = 8181  [MATCH]
+Tour 1 CPU length = 8181, GPU length = 8181  [MATCH]
+Tour 2 CPU length = 8181, GPU length = 8181  [MATCH]
+Tour 3 CPU length = 8181, GPU length = 8181  [MATCH]

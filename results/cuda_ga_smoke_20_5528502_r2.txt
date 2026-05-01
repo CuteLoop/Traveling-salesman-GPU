@@ -1,0 +1,32 @@
+NAME: smoke_20
+TYPE: TSP
+DIMENSION: 20
+Population: 512
+Generations: 1000
+Mutation rate: 0.05
+Elite count: 4
+Generation 1 best = 80, global best = 80
+Generation 50 best = 75, global best = 75
+Generation 100 best = 75, global best = 75
+Generation 150 best = 75, global best = 75
+Generation 200 best = 75, global best = 75
+Generation 250 best = 75, global best = 75
+Generation 300 best = 75, global best = 75
+Generation 350 best = 75, global best = 75
+Generation 400 best = 75, global best = 75
+Generation 450 best = 75, global best = 75
+Generation 500 best = 75, global best = 75
+Generation 550 best = 75, global best = 75
+Generation 600 best = 75, global best = 75
+Generation 650 best = 75, global best = 75
+Generation 700 best = 75, global best = 75
+Generation 750 best = 75, global best = 75
+Generation 800 best = 75, global best = 75
+Generation 850 best = 75, global best = 75
+Generation 900 best = 75, global best = 75
+Generation 950 best = 75, global best = 75
+Generation 1000 best = 75, global best = 75
+
+Best GA tour length: 75
+Best tour (0-based indices):
+14 13 5 19 4 10 8 9 18 6 11 12 15 0 3 17 16 1 2 7 14

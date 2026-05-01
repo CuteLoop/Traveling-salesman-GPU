@@ -1,0 +1,10 @@
+VERSION: GPU-Pop B1+B2+B3-shuffle+B4-smem
+NAME: BERLIN52  DIMENSION: 52
+Islands: 128  Generations: 1000
+Shared memory breakdown for n=52:
+  population: 13824 bytes
+  s_dist:     10816 bytes
+  total:      24640 bytes (limit: 65536)
+Occupancy: 2 blocks/SM (3.125%)
+
+Best tour length: 9566

@@ -1,0 +1,5 @@
+VERSION: GPU-Pop B1+B2+B3-shuffle+B4-global
+NAME: BERLIN52  DIMENSION: 52
+Islands: 128  Generations: 1000
+
+Best tour length: 9566

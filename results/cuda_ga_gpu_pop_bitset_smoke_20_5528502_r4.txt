@@ -1,0 +1,14 @@
+VERSION: GPU-Pop Bitset Variant
+NAME: smoke_20
+TYPE: TSP
+DIMENSION: 20
+Islands: 128
+Island population: 32
+Total GPU population: 4096
+Generations: 1000
+Mutation rate: 0.05
+Elite count per island: 2
+
+Best GPU-population GA tour length: 73
+Best tour (0-based indices):
+0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0

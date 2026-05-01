@@ -1,0 +1,22 @@
+NAME: smoke_20
+TYPE: TSP
+DIMENSION: 20
+First 15 matrix elements:
+0 6 5 3 11 8 7 1 12 8 26 5 5 5 7 
+
+Greedy nearest-neighbor result:
+Tour length: 80
+Tour (0-based indices):
+8 9 18 6 5 19 4 14 13 11 12 15 0 7 3 17 16 1 2 10 8
+
+GPU tour length evaluation:
+Tour 0 GPU length = 80
+Tour 1 GPU length = 80
+Tour 2 GPU length = 80
+Tour 3 GPU length = 80
+
+CPU cross-check:
+Tour 0 CPU length = 80, GPU length = 80  [MATCH]
+Tour 1 CPU length = 80, GPU length = 80  [MATCH]
+Tour 2 CPU length = 80, GPU length = 80  [MATCH]
+Tour 3 CPU length = 80, GPU length = 80  [MATCH]
