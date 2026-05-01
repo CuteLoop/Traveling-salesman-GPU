@@ -370,6 +370,11 @@ int main(int argc, char* argv[]) {
         std::cout << "Generations: " << cfg.generations << "\n";
         TourResult best = run_gpu_population_ga(inst, cfg);
         std::cout << "\nBest tour length: " << best.length << "\n";
+        std::cout << "Best tour (0-based indices):\n";
+        for (int city : best.tour) {
+            std::cout << city << " ";
+        }
+        std::cout << best.tour.front() << "\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

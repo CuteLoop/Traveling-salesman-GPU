@@ -32,10 +32,10 @@ fi
 if [[ -n "$HOST_CC" ]]; then
 	echo "Using host C compiler: $HOST_CC"
 	make clean CC="$HOST_CC"
-	make -j4 CC="$HOST_CC"
+	make -j4 CC="$HOST_CC" all all_cuda_versions
 else
 	make clean
-	make -j4
+	make -j4 all all_cuda_versions
 fi
 
 echo "=== Build complete ==="

@@ -1,0 +1,2 @@
+implementation,dataset,runs,valid_tour_rate,min_best_length,max_best_length,mean_best_length,median_best_length,stdev_best_length,mean_runtime_sec,median_runtime_sec,stdev_runtime_sec,success_rate_within_0pct,success_rate_within_1pct,success_rate_within_5pct,success_rate_within_10pct,reference_length
+gpu_naive,sequential/tests/fixtures/smoke_20.tsp,1,0.0,,,,,,,,,,,,,73.0

@@ -442,8 +442,41 @@ sbatch --export=ALL,DATASET=data/berlin52.tsp slurm/run_cuda_all_variants.slurm
 
 The matrix script writes files like:
 
-- `results/cuda_ga_b3_shuffle_smoke_20_<jobid>.txt`
-- `results/cuda_ga_b4_global_berlin52_<jobid>.txt`
+- `results/cuda_ga_b3_shuffle_smoke_20_<jobid>_r1.txt`
+- `results/cuda_ga_b4_global_berlin52_<jobid>_r3.txt`
+- `results/cuda_ga_b3_shuffle_smoke_20_<jobid>_r1_best_tour.csv`
+- `results/cuda_all_variants_summary_smoke_20_<jobid>.csv`
+- `results/cuda_all_variants_aggregate_smoke_20_<jobid>.csv`
+
+The matrix summary CSV includes one row per implementation repeat with:
+
+- implementation name
+- repeat id
+- seed used
+- dataset path
+- executable and command used
+- runtime in seconds
+- best length found
+- output `.txt` path
+- best tour CSV path (when available)
+
+The matrix aggregate CSV includes one row per implementation with:
+
+- number of repeats
+- number of successful repeats
+- mean runtime and runtime standard deviation
+- mean best length and best-length standard deviation
+- minimum and maximum best length
+- best-run repeat id
+- best-run output `.txt` path
+- best-run tour CSV path
+
+Each best tour CSV is normalized as:
+
+- header: `order,city`
+- one city index per line, in tour order (including return-to-start city if printed by the solver)
+
+The main matrix script stays the primary workflow. By default it runs each implementation `5` times with the same seed (`SEED`, default `42`) and writes both the raw repeat-level summary and the aggregate summary automatically. Override with `RUNS=<n>` if needed.
 
 Each job writes result files with the Slurm job ID suffix, for example:
 
@@ -534,18 +567,48 @@ What it does:
 
 Tip: add `--no-release-build` if you do not want the script to force `BUILD=release` for the sequential binary.
 
-### 9.1 Local + HPC Batch Results (`smoke_20.tsp`)
+### 9.1 Latest Runtime + Tour Quality Results
 
-This table combines local-PC measurements and HPC batch-job measurements.
+The latest pulled Slurm matrix runs are `5526437` for `smoke_20.tsp` and `5526438` for `berlin52.tsp`. Lower best-tour length is better.
+
+Local smoke20 baselines:
 
 | Implementation | Environment | Runtime (s) | Best tour length |
 |---|---|---:|---:|
 | Python baseline (pyCombinatorial GA) | Local PC | 41.956912 | 75.776906 |
 | Sequential C (`ga-tsp`) | Local PC | 0.055615 | 77.492495 |
-| Sequential (`build/Sequential`) | HPC batch (`sequential_5487207.txt`) | 0.01 | 77.492495 |
-| GPU-Naive (`build/GPU-Naive`) | HPC batch (`gpu_naive_5487208.txt`) | 0.13 | 80 |
-| CUDA-GA hybrid (`build/CUDA-GA`) | HPC batch (`cuda_ga_5487209.txt`) | 0.39 | 75 |
-| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | HPC batch (`cuda_ga_gpu_pop_5487210.txt`) | 0.20 | 73 |
+
+Latest HPC matrix results (`smoke_20.tsp`, job `5526437`):
+
+| Implementation | Runtime (s) | Best tour length |
+|---|---:|---:|
+| GPU-Naive (`build/GPU-Naive`) | 0.18 | 80 |
+| CUDA-GA hybrid (`build/CUDA-GA`) | 0.35 | 75 |
+| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.17 | 73 |
+| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.17 | 73 |
+| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.16 | 73 |
+| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.17 | 73 |
+| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.17 | 73 |
+| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.13 | 73 |
+| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.12 | 73 |
+| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.12 | 73 |
+| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.12 | 73 |
+
+Latest HPC matrix results (`berlin52.tsp`, job `5526438`):
+
+| Implementation | Runtime (s) | Best tour length |
+|---|---:|---:|
+| GPU-Naive (`build/GPU-Naive`) | 0.16 | 8181 |
+| CUDA-GA hybrid (`build/CUDA-GA`) | 0.51 | 7542 |
+| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.20 | 9412 |
+| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.20 | 9412 |
+| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.18 | 9412 |
+| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.19 | 9412 |
+| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.20 | 9412 |
+| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.15 | 9566 |
+| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.15 | 9566 |
+| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.15 | 9566 |
+| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.18 | 9566 |
 
 ### 9.2 Tour Sequences (rows) + final length
 
@@ -627,6 +690,7 @@ The active optimization plan and final-report drafting work are tracked in two l
 
 - [docs/optimization-roadmap.md](docs/optimization-roadmap.md)
 - [docs/report/report.md](docs/report/report.md)
+- [challenges.md](challenges.md)
 
 ### 10.1 Optimization To-Do
 
@@ -672,7 +736,23 @@ Current report status summary:
 - Needs-data sections: Abstract, Optimization Story, Discussion, Conclusion.
 - Experiment-pending section: Experimental Results.
 
-### 10.4 Immediate Next Actions
+### 10.4 Determinism and Validation Workflow
+
+Determinism is kept separate from the normal version-story pipeline.
+
+Use these when you specifically want validation runs:
+
+```bash
+make audit_determinism_smoke20
+make audit_determinism_berlin52
+
+make benchmark_seeds_smoke20
+make benchmark_seeds_berlin52
+```
+
+These commands go through the audit harness and are intended for reproducibility and correctness validation, not the default daily benchmark path.
+
+### 10.5 Immediate Next Actions
 
 1. Add kernel timing instrumentation to `CUDA-GA.cu` and `CUDA-GA-GPU-Pop.cu`.
 2. Collect profiler baselines for the current GPU-population kernel.

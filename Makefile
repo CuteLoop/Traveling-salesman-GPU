@@ -67,7 +67,7 @@ NVCCFLAGS  ?= -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo -Isrc
 
 LDLIBS_SEQ := -lm
 
-.PHONY: all clean dirs info variants all_cuda_versions sbatch_cuda_smoke20 sbatch_cuda_berlin52
+.PHONY: all clean dirs info variants all_cuda_versions sbatch_cuda_smoke20 sbatch_cuda_berlin52 audit_determinism_smoke20 audit_determinism_berlin52 benchmark_seeds_smoke20 benchmark_seeds_berlin52
 
 all: dirs $(SEQ_BIN) $(NAIVE_BIN) $(HYBRID_BIN) $(ISLAND_BIN) $(ISLAND_BANKCONFLICT_BIN) $(ISLAND_BITSET_BIN) $(ISLAND_PARALLEL_SORT_BIN)
 
@@ -143,6 +143,18 @@ sbatch_cuda_smoke20:
 
 sbatch_cuda_berlin52:
 	sbatch --export=ALL,DATASET=$(BERLIN52_DATASET) slurm/run_cuda_all_variants.slurm
+
+audit_determinism_smoke20:
+	sbatch --export=ALL,DATASET=$(SMOKE20_DATASET),MODE=determinism,IMPLEMENTATION_SET=all,REPEATS=5 slurm/run_seed_benchmark.slurm
+
+audit_determinism_berlin52:
+	sbatch --export=ALL,DATASET=$(BERLIN52_DATASET),MODE=determinism,IMPLEMENTATION_SET=all,REPEATS=5 slurm/run_seed_benchmark.slurm
+
+benchmark_seeds_smoke20:
+	sbatch --export=ALL,DATASET=$(SMOKE20_DATASET),MODE=benchmark,IMPLEMENTATION_SET=all slurm/run_seed_benchmark.slurm
+
+benchmark_seeds_berlin52:
+	sbatch --export=ALL,DATASET=$(BERLIN52_DATASET),MODE=benchmark,IMPLEMENTATION_SET=all slurm/run_seed_benchmark.slurm
 
 clean:
 	rm -rf $(BUILD_DIR)
