@@ -128,11 +128,18 @@ Build only the CUDA matrix targets used by the Slurm runners:
 make all_cuda_versions
 ```
 
+Print the standardized CUDA matrix config:
+
+```bash
+make print_cuda_matrix_config
+```
+
 Current root Makefile targets include:
 
 - `build/Sequential`
 - `build/GPU-Naive`
 - `build/CUDA-GA`
+- `build/CUDA-GA-no-greedy`
 - `build/CUDA-GA-GPU-Pop`
 - `build/CUDA-GA-GPU-Pop-bankconflict`
 - `build/CUDA-GA-GPU-Pop-bitset`
@@ -147,6 +154,11 @@ Current root Makefile targets include:
 - `build/CUDA-GA-B4-global`
 - `build/CUDA-GA-B4-smem`
 - `build/CUDA-GA-B5-bigpop`
+- `build/CUDA-GA-C1-stride`
+- `build/CUDA-GA-C2-bitmask`
+- `build/CUDA-GA-C3-reduce`
+- `build/CUDA-GA-C4-global`
+- `build/CUDA-GA-C5-bigpop`
 
 Direct compile example for a single variant from repo root:
 
@@ -157,10 +169,46 @@ nvcc -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo -Isrc/cpp \
 
 ## HPC Workflow
 
+Standard CUDA matrix config used for the all-variants Slurm sweeps:
+
+| Setting | Standard value |
+|---|---:|
+| `RUNS` | `20` |
+| `ISLANDS` | `256` |
+| `GENERATIONS` | `2000` |
+| `MUTATION` | `0.03` |
+| `ELITE_POP` | `2` |
+| `ELITE_HYBRID` | `4` |
+| `POP_HYBRID` | `512` |
+| `SEED_BASE` | `100` |
+
+Datasets used with that config:
+
+| Sweep | Dataset |
+|---|---|
+| smoke_20 | `sequential/tests/fixtures/smoke_20.tsp` |
+| berlin52 | `data/berlin52.tsp` |
+
+Preferred entry points from the repo root on HPC:
+
+```bash
+make sbatch_cuda_smoke20
+make sbatch_cuda_berlin52
+```
+
+Those Make targets submit `slurm/run_cuda_all_variants_csv.slurm` with the standard config above.
+
+If you need one-off overrides, pass them through `make`:
+
+```bash
+make sbatch_cuda_berlin52 CUDA_MATRIX_RUNS=5
+make sbatch_cuda_smoke20 CUDA_MATRIX_GENERATIONS=1000 CUDA_MATRIX_SEED_BASE=200
+```
+
 The most useful all-variants runner is:
 
 ```bash
-sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=20,ISLANDS=256,GENERATIONS=2000,MUTATION=0.03,ELITE_POP=2,SEED_BASE=100 slurm/run_cuda_all_variants_csv.slurm
+sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=20,ISLANDS=256,GENERATIONS=2000,MUTATION=0.03,ELITE_POP=2,ELITE_HYBRID=4,POP_HYBRID=512,SEED_BASE=100 slurm/run_cuda_all_variants_csv.slurm
 ```
 
 That script:
@@ -184,6 +232,12 @@ Other experiment runners:
 ```bash
 sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10 slurm/run_cuda_all_variants_csv_randomseed.slurm
 sbatch --export=ALL,DATASET=data/berlin52.tsp,TARGET_LENGTH=7542,RUNS=10 slurm/run_cuda_modified_target_avg.slurm
+```
+
+For smoke_20 with the same standardized matrix config:
+
+```bash
+sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=20,ISLANDS=256,GENERATIONS=2000,MUTATION=0.03,ELITE_POP=2,ELITE_HYBRID=4,POP_HYBRID=512,SEED_BASE=100 slurm/run_cuda_all_variants_csv.slurm
 ```
 
 Experiment references:

@@ -159,7 +159,7 @@ run_and_record() {
   echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${best_tour_path},${status},${notes}" >> "$RUN_CSV"
 }
 
-if [ ! -x ./build/CUDA-GA-B5-bigpop ]; then
+if [ ! -x ./build/CUDA-GA-C5-bigpop ]; then
   echo "Building CUDA variants with make all_cuda_versions..."
   make all_cuda_versions
 fi
@@ -174,6 +174,9 @@ for run_index in $(seq 1 "$RUNS"); do
 
   run_and_record "cuda_ga" "build/CUDA-GA" "$run_index" "$seed" "$POP_HYBRID" "NA" "$GENERATIONS" "$MUTATION" "$ELITE_HYBRID" \
     ./build/CUDA-GA "$DATASET" "$POP_HYBRID" "$GENERATIONS" "$MUTATION" "$ELITE_HYBRID" "$seed"
+
+  run_and_record "cuda_ga_no_greedy" "build/CUDA-GA-no-greedy" "$run_index" "$seed" "$POP_HYBRID" "NA" "$GENERATIONS" "$MUTATION" "$ELITE_HYBRID" \
+    ./build/CUDA-GA-no-greedy "$DATASET" "$POP_HYBRID" "$GENERATIONS" "$MUTATION" "$ELITE_HYBRID" "$seed"
 
   run_and_record "cuda_ga_gpu_pop" "build/CUDA-GA-GPU-Pop" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
     ./build/CUDA-GA-GPU-Pop "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
@@ -213,6 +216,21 @@ for run_index in $(seq 1 "$RUNS"); do
 
   run_and_record "cuda_ga_b5_bigpop" "build/CUDA-GA-B5-bigpop" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
     ./build/CUDA-GA-B5-bigpop "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
+  run_and_record "cuda_ga_c1_stride" "build/CUDA-GA-C1-stride" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-C1-stride "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
+  run_and_record "cuda_ga_c2_bitmask" "build/CUDA-GA-C2-bitmask" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-C2-bitmask "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
+  run_and_record "cuda_ga_c3_reduce" "build/CUDA-GA-C3-reduce" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-C3-reduce "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
+  run_and_record "cuda_ga_c4_global" "build/CUDA-GA-C4-global" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-C4-global "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
+  run_and_record "cuda_ga_c5_bigpop" "build/CUDA-GA-C5-bigpop" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-C5-bigpop "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
 
   if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
     run_and_record "cuda_ga_b4_smem" "build/CUDA-GA-B4-smem" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \

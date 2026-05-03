@@ -1,48 +1,37 @@
-// CUDA-GA-B2-bitmask.cu
+// CUDA-GA-B1-stride.cu
 // ============================================================
-// Optimization B2: Eliminate Local Memory Spill in OX Crossover
-// via 4-Register Bitmask (uint32_t used0..used3)
+// Optimization B1: Shared Memory Bank Conflict Elimination
+// via Stride Padding (stride = n + 1)
 // ============================================================
-// Cumulative fixes applied: B1 (stride padding) + B2 (bitmask)
+// Cumulative fixes applied: B1
+// Baseline: CUDA-GA-GPU-Pop.cu
 //
-// THE PROBLEM (B2):
-//   order_crossover_device declares: int used[MAX_CITIES] = int used[128]
-//   This is a 128-element int array indexed by runtime-dependent values
-//   (gene values from the tour), so the compiler cannot keep it in registers.
-//   It spills to LOCAL MEMORY — which is physically DRAM, per-thread addressed.
+// THE ONE CHANGE:
+//   Before: int* pop_a = shared;
+//           int* pop_b = pop_a + BLOCK_POP_SIZE * n;      // stride = n
+//           access: pop_a[tid * n + k]
 //
-//   Traffic per crossover call:
-//     Writes:  128 × 4 = 512 bytes to DRAM (used[gene] = 1)
-//     Reads:   128 × 4 = 512 bytes from DRAM (if used[gene])
-//     Total:   1,024 bytes per child per generation
+//   After:  const int stride = n + 1;
+//           int* pop_a = shared;
+//           int* pop_b = pop_a + BLOCK_POP_SIZE * stride; // stride = n + 1
+//           access: pop_a[tid * stride + k]
 //
-//   At 30 non-elite threads × 128 islands × 1000 generations:
-//     30 × 128 × 1000 × 1024 = 3.93 GB of hidden DRAM traffic
+// WHY IT WORKS:
+//   P100 shared memory has 32 banks, 4 bytes each.
+//   Bank of element at word-index e: bank(e) = e % 32
+//   With stride = n = 128: bank(t, k) = (t*128 + k) % 32 = k % 32  <- identical for all t!
+//   Every warp thread hits the same bank -> 32-way serialization.
+//   With stride = n + 1 = 129: bank(t, k) = (t*129 + k) % 32 = (t + k) % 32
+//   Thread 0: bank k, thread 1: bank k+1, ..., thread 31: bank k+31 -> all 32 distinct banks.
 //
-// THE FIX (B2):
-//   Replace int used[128] with four uint32_t variables (used0, used1, used2, used3).
-//   These represent a 128-bit bitmask where bit c is set if city c has been placed.
-//   With only 4 scalar values, the compiler keeps them in registers — zero DRAM traffic.
-//
-//   City c lives in:
-//     [0..31]   -> used0, bit position (c % 32) = c
-//     [32..63]  -> used1, bit position (c % 32) = c - 32
-//     [64..95]  -> used2, bit position (c % 32) = c - 64
-//     [96..127] -> used3, bit position (c % 32) = c - 96
-//
-//   MARK(c):  set bit c in the appropriate word  (one bitwise OR)
-//   ISSET(c): test bit c                         (one shift + AND)
-//
-// LIMITATION: This fix is hardcoded for n <= 128. For n <= 64: use used0+used1.
-//   For general n > 128: a different approach is needed (e.g., smem bitmask).
-//
-// EXPECTED PROFILER RESULT:
-//   ptxas: lmem = 512 (V0/B1) -> lmem = 0 (B2)
-//   nvprof: local_load_transactions = 0, local_store_transactions = 0
+// EXPECTED PROFILER RESULT (nvprof):
+//   shared_load_transactions_per_request:  ~32 (before) -> ~1 (after)
+//   shared_store_transactions_per_request: ~32 (before) -> ~1 (after)
 
 #include "tsplib_parser.h"
 
 #include <cuda_runtime.h>
+
 #include <algorithm>
 #include <chrono>
 #include <cstdint>
@@ -118,31 +107,7 @@ __device__ int tournament_select_device(const int* lengths, unsigned int& rng) {
     return best;
 }
 
-// ─── B2 FIX: bitmask OX crossover ────────────────────────────────────────────
-//
-// MARK(c):  ORs the bit for city c into the correct word register.
-//           The (c) & 31 extracts the bit position within the 32-bit word.
-//           The if-else chain selects which of the 4 words to update.
-//           The compiler evaluates the if-else at runtime but all branches
-//           touch only register variables -> no memory access.
-//
-// ISSET(c): reads the bit for city c. The ternary chains are equivalent to
-//           if-else and again operate purely on registers.
-//
-#define MARK(c)  do {                                              \
-    uint32_t _bit = 1u << ((c) & 31);                             \
-    if      ((c) <  32) used0 |= _bit;                            \
-    else if ((c) <  64) used1 |= _bit;                            \
-    else if ((c) <  96) used2 |= _bit;                            \
-    else                used3 |= _bit;                            \
-} while (0)
-
-#define ISSET(c) (                                                 \
-    (c) <  32 ? (used0 >> ((c)     )) & 1u :                      \
-    (c) <  64 ? (used1 >> ((c) - 32)) & 1u :                      \
-    (c) <  96 ? (used2 >> ((c) - 64)) & 1u :                      \
-                (used3 >> ((c) - 96)) & 1u )
-
+// B2 NOT yet applied: used[] still spills to local memory here.
 __device__ void order_crossover_device(const int* pool_a, int a_idx,
                                        const int* pool_b, int b_idx,
                                        int* pool_c, int c_idx,
@@ -152,31 +117,23 @@ __device__ void order_crossover_device(const int* pool_a, int a_idx,
     int right = rand_bounded(rng, n);
     if (left > right) { int tmp = left; left = right; right = tmp; }
 
-    // ── B2 FIX: 4 register words replace int used[MAX_CITIES] ────────────
-    uint32_t used0 = 0u, used1 = 0u, used2 = 0u, used3 = 0u;
-    // ──────────────────────────────────────────────────────────────────────
+    int used[MAX_CITIES];
+    for (int i = 0; i < n; ++i) { STOUR(pool_c, c_idx, i) = -1; used[i] = 0; }
 
-    for (int i = 0; i < n; ++i) STOUR(pool_c, c_idx, i) = -1;
-
-    // Copy segment [left..right] from parent_a; mark those cities
     for (int i = left; i <= right; ++i) {
         STOUR(pool_c, c_idx, i) = STOUR(pool_a, a_idx, i);
-        MARK(STOUR(pool_a, a_idx, i));
+        used[STOUR(pool_a, a_idx, i)] = 1;
     }
 
-    // Fill remaining positions from parent_b in order
     int out = (right + 1) % n;
     for (int offset = 1; offset <= n; ++offset) {
         int gene = STOUR(pool_b, b_idx, (right + offset) % n);
-        if (ISSET(gene)) continue;   // already placed
+        if (used[gene]) continue;
         STOUR(pool_c, c_idx, out) = gene;
-        MARK(gene);
+        used[gene] = 1;
         out = (out + 1) % n;
     }
 }
-
-#undef MARK
-#undef ISSET
 
 __device__ void mutate_swap_device(int* pool, int idx, int stride, int n,
                                    float mutation_rate,
@@ -229,29 +186,95 @@ __device__ void find_top_k_reduce(const int* lengths,
     }
 }
 
-// ─── main kernel (B1 + B2 applied) ───────────────────────────────────────────
+__global__ void greedy_nn_kernel(const int* __restrict__ d_dist,
+                                 int* d_nn_tours,
+                                 int* d_nn_lengths,
+                                 int n) {
+    if (threadIdx.x != 0) return;
+
+    const int start = blockIdx.x;
+    int* tour = d_nn_tours + start * n;
+
+    uint32_t vis0 = 0u, vis1 = 0u, vis2 = 0u, vis3 = 0u;
+#define NN_MARK(c) do { \
+    if ((c) < 32) vis0 |= (1u << (c)); \
+    else if ((c) < 64) vis1 |= (1u << ((c) - 32)); \
+    else if ((c) < 96) vis2 |= (1u << ((c) - 64)); \
+    else vis3 |= (1u << ((c) - 96)); \
+} while (0)
+#define NN_ISSET(c) ( \
+    (c) < 32 ? (vis0 >> (c)) & 1u : \
+    (c) < 64 ? (vis1 >> ((c) - 32)) & 1u : \
+    (c) < 96 ? (vis2 >> ((c) - 64)) & 1u : \
+               (vis3 >> ((c) - 96)) & 1u )
+
+    int cur = start;
+    tour[0] = cur;
+    NN_MARK(cur);
+    int total = 0;
+
+    for (int pos = 1; pos < n; ++pos) {
+        const int* row = d_dist + cur * n;
+        int best_city = -1;
+        int best_d = INT_MAX;
+        for (int city = 0; city < n; ++city) {
+            if (NN_ISSET(city)) continue;
+            if (row[city] < best_d) {
+                best_d = row[city];
+                best_city = city;
+            }
+        }
+        tour[pos] = best_city;
+        NN_MARK(best_city);
+        total += best_d;
+        cur = best_city;
+    }
+    total += d_dist[cur * n + start];
+    d_nn_lengths[start] = total;
+
+#undef NN_MARK
+#undef NN_ISSET
+}
+
+// ─── main kernel ─────────────────────────────────────────────────────────────
 
 __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
                                   int elite_count, unsigned int seed,
+                                  const int* d_seed_tour,
                                   int* best_tours, int* best_lengths) {
     extern __shared__ int shared[];
 
     const int tid    = threadIdx.x;
     const int island = blockIdx.x;
-    const int stride = n + 1;   // B1: padding to eliminate bank conflicts
+
+    // ── B1 FIX: stride = n + 1 ────────────────────────────────────────────
+    const int stride = n + 1;   // <-- KEY CHANGE
 
     int* pop_a   = shared;
-    int* pop_b   = pop_a  + BLOCK_POP_SIZE * stride;
-    int* lengths = pop_b  + BLOCK_POP_SIZE * stride;
+    int* pop_b   = pop_a  + BLOCK_POP_SIZE * stride;  // was: * n
+    int* lengths = pop_b  + BLOCK_POP_SIZE * stride;  // was: * n
     int* order   = lengths + BLOCK_POP_SIZE;
     int* s_red   = order   + BLOCK_POP_SIZE;
+    // ──────────────────────────────────────────────────────────────────────
 
     unsigned int rng = seed
         ^ (static_cast<unsigned int>(island + 1) * 747796405u)
         ^ (static_cast<unsigned int>(tid    + 1) * 2891336453u);
     if (rng == 0) rng = 1;
 
-    if (tid < BLOCK_POP_SIZE) {
+    if (tid == 0) {
+        for (int k = 0; k < n; ++k)
+            STOUR(pop_a, 0, k) = d_seed_tour[k];
+        int n_swaps = 2 + (island % 8);
+        for (int s = 0; s < n_swaps; ++s) {
+            int a = rand_bounded(rng, n);
+            int b = rand_bounded(rng, n);
+            int tmp = STOUR(pop_a, 0, a);
+            STOUR(pop_a, 0, a) = STOUR(pop_a, 0, b);
+            STOUR(pop_a, 0, b) = tmp;
+        }
+    }
+    if (tid > 0) {
         for (int i = 0; i < n; ++i) STOUR(pop_a, tid, i) = i;
         for (int i = n - 1; i > 0; --i) {
             int j = rand_bounded(rng, i + 1);
@@ -266,12 +289,15 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
     int* next    = pop_b;
 
     for (int generation = 0; generation < generations; ++generation) {
+
+        // Evaluate fitness
         if (tid < BLOCK_POP_SIZE)
             lengths[tid] = tour_length_const(current, tid, stride, n);
         __syncthreads();
 
         find_top_k_reduce(lengths, order, s_red, tid, elite_count);
 
+        // Elite copy + crossover/mutation
         if (tid < elite_count) {
             const int elite_idx = order[tid];
             for (int k = 0; k < n; ++k)
@@ -291,6 +317,7 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
         __syncthreads();
     }
 
+    // Final evaluation
     if (tid < BLOCK_POP_SIZE)
         lengths[tid] = tour_length_const(current, tid, stride, n);
     __syncthreads();
@@ -345,20 +372,48 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMemcpyToSymbol(c_dist, inst.dist.data(),
                                   sizeof(int) * inst.dist.size()));
 
+    int* d_dist_tmp = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_dist_tmp, sizeof(int) * inst.dist.size()));
+    CUDA_CHECK(cudaMemcpy(d_dist_tmp, inst.dist.data(),
+                          sizeof(int) * inst.dist.size(), cudaMemcpyHostToDevice));
+
+    int* d_nn_tours = nullptr;
+    int* d_nn_lengths = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_nn_tours, sizeof(int) * n * n));
+    CUDA_CHECK(cudaMalloc(&d_nn_lengths, sizeof(int) * n));
+
+    greedy_nn_kernel<<<n, 1>>>(d_dist_tmp, d_nn_tours, d_nn_lengths, n);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<int> h_nn_lengths(n);
+    CUDA_CHECK(cudaMemcpy(h_nn_lengths.data(), d_nn_lengths,
+                          sizeof(int) * n, cudaMemcpyDeviceToHost));
+    int best_nn = static_cast<int>(std::min_element(h_nn_lengths.begin(),
+                                                    h_nn_lengths.end())
+                                   - h_nn_lengths.begin());
+    const int* d_seed_tour = d_nn_tours + best_nn * n;
+
+    CUDA_CHECK(cudaFree(d_dist_tmp));
+    CUDA_CHECK(cudaFree(d_nn_lengths));
+
     int* d_best_tours   = nullptr;
     int* d_best_lengths = nullptr;
     CUDA_CHECK(cudaMalloc(&d_best_tours,
                           sizeof(int) * static_cast<size_t>(cfg.islands) * n));
     CUDA_CHECK(cudaMalloc(&d_best_lengths, sizeof(int) * cfg.islands));
 
+    // ── B1 FIX: shared memory now uses stride = n + 1 ────────────────────
     const int stride = n + 1;
     const size_t shared_ints =
         2 * static_cast<size_t>(BLOCK_POP_SIZE) * stride +
         3 * static_cast<size_t>(BLOCK_POP_SIZE);
     const size_t shared_bytes = sizeof(int) * shared_ints;
+    // ──────────────────────────────────────────────────────────────────────
 
     ga_island_kernel<<<cfg.islands, BLOCK_POP_SIZE, shared_bytes>>>(
         n, cfg.generations, cfg.mutation_rate, cfg.elite_count, seed,
+        d_seed_tour,
         d_best_tours, d_best_lengths);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -369,6 +424,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
                           sizeof(int) * h_best_tours.size(),   cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(h_best_lengths.data(), d_best_lengths,
                           sizeof(int) * h_best_lengths.size(), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d_nn_tours));
     CUDA_CHECK(cudaFree(d_best_tours));
     CUDA_CHECK(cudaFree(d_best_lengths));
 
@@ -398,11 +454,13 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        std::cout << "VERSION: cuda_ga_b2_bitmask\n";
+
+        std::cout << "VERSION: cuda_ga_c1_stride\n";
         std::cout << "NAME: " << inst.name << "\n";
         std::cout << "DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "\n";
         std::cout << "Generations: " << cfg.generations << "\n";
+
         const auto started_at = std::chrono::high_resolution_clock::now();
         TourResult best = run_gpu_population_ga(inst, cfg);
         const auto finished_at = std::chrono::high_resolution_clock::now();

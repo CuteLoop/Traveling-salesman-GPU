@@ -375,7 +375,7 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        std::cout << "VERSION: GPU-Pop B1+B2+B3-reduce\n";
+        std::cout << "VERSION: cuda_ga_b3_reduce\n";
         std::cout << "NAME: " << inst.name << "\n";
         std::cout << "DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "\n";

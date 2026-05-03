@@ -229,10 +229,61 @@ __device__ void find_top_k_reduce(const int* lengths,
     }
 }
 
+__global__ void greedy_nn_kernel(const int* __restrict__ d_dist,
+                                 int* d_nn_tours,
+                                 int* d_nn_lengths,
+                                 int n) {
+    if (threadIdx.x != 0) return;
+
+    const int start = blockIdx.x;
+    int* tour = d_nn_tours + start * n;
+
+    uint32_t vis0 = 0u, vis1 = 0u, vis2 = 0u, vis3 = 0u;
+#define NN_MARK(c) do { \
+    if ((c) < 32) vis0 |= (1u << (c)); \
+    else if ((c) < 64) vis1 |= (1u << ((c) - 32)); \
+    else if ((c) < 96) vis2 |= (1u << ((c) - 64)); \
+    else vis3 |= (1u << ((c) - 96)); \
+} while (0)
+#define NN_ISSET(c) ( \
+    (c) < 32 ? (vis0 >> (c)) & 1u : \
+    (c) < 64 ? (vis1 >> ((c) - 32)) & 1u : \
+    (c) < 96 ? (vis2 >> ((c) - 64)) & 1u : \
+               (vis3 >> ((c) - 96)) & 1u )
+
+    int cur = start;
+    tour[0] = cur;
+    NN_MARK(cur);
+    int total = 0;
+
+    for (int pos = 1; pos < n; ++pos) {
+        const int* row = d_dist + cur * n;
+        int best_city = -1;
+        int best_d = INT_MAX;
+        for (int city = 0; city < n; ++city) {
+            if (NN_ISSET(city)) continue;
+            if (row[city] < best_d) {
+                best_d = row[city];
+                best_city = city;
+            }
+        }
+        tour[pos] = best_city;
+        NN_MARK(best_city);
+        total += best_d;
+        cur = best_city;
+    }
+    total += d_dist[cur * n + start];
+    d_nn_lengths[start] = total;
+
+#undef NN_MARK
+#undef NN_ISSET
+}
+
 // ─── main kernel (B1 + B2 applied) ───────────────────────────────────────────
 
 __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
                                   int elite_count, unsigned int seed,
+                                  const int* d_seed_tour,
                                   int* best_tours, int* best_lengths) {
     extern __shared__ int shared[];
 
@@ -251,7 +302,19 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
         ^ (static_cast<unsigned int>(tid    + 1) * 2891336453u);
     if (rng == 0) rng = 1;
 
-    if (tid < BLOCK_POP_SIZE) {
+    if (tid == 0) {
+        for (int k = 0; k < n; ++k)
+            STOUR(pop_a, 0, k) = d_seed_tour[k];
+        int n_swaps = 2 + (island % 8);
+        for (int s = 0; s < n_swaps; ++s) {
+            int a = rand_bounded(rng, n);
+            int b = rand_bounded(rng, n);
+            int tmp = STOUR(pop_a, 0, a);
+            STOUR(pop_a, 0, a) = STOUR(pop_a, 0, b);
+            STOUR(pop_a, 0, b) = tmp;
+        }
+    }
+    if (tid > 0) {
         for (int i = 0; i < n; ++i) STOUR(pop_a, tid, i) = i;
         for (int i = n - 1; i > 0; --i) {
             int j = rand_bounded(rng, i + 1);
@@ -345,6 +408,31 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMemcpyToSymbol(c_dist, inst.dist.data(),
                                   sizeof(int) * inst.dist.size()));
 
+    int* d_dist_tmp = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_dist_tmp, sizeof(int) * inst.dist.size()));
+    CUDA_CHECK(cudaMemcpy(d_dist_tmp, inst.dist.data(),
+                          sizeof(int) * inst.dist.size(), cudaMemcpyHostToDevice));
+
+    int* d_nn_tours = nullptr;
+    int* d_nn_lengths = nullptr;
+    CUDA_CHECK(cudaMalloc(&d_nn_tours, sizeof(int) * n * n));
+    CUDA_CHECK(cudaMalloc(&d_nn_lengths, sizeof(int) * n));
+
+    greedy_nn_kernel<<<n, 1>>>(d_dist_tmp, d_nn_tours, d_nn_lengths, n);
+    CUDA_CHECK(cudaGetLastError());
+    CUDA_CHECK(cudaDeviceSynchronize());
+
+    std::vector<int> h_nn_lengths(n);
+    CUDA_CHECK(cudaMemcpy(h_nn_lengths.data(), d_nn_lengths,
+                          sizeof(int) * n, cudaMemcpyDeviceToHost));
+    int best_nn = static_cast<int>(std::min_element(h_nn_lengths.begin(),
+                                                    h_nn_lengths.end())
+                                   - h_nn_lengths.begin());
+    const int* d_seed_tour = d_nn_tours + best_nn * n;
+
+    CUDA_CHECK(cudaFree(d_dist_tmp));
+    CUDA_CHECK(cudaFree(d_nn_lengths));
+
     int* d_best_tours   = nullptr;
     int* d_best_lengths = nullptr;
     CUDA_CHECK(cudaMalloc(&d_best_tours,
@@ -359,6 +447,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
 
     ga_island_kernel<<<cfg.islands, BLOCK_POP_SIZE, shared_bytes>>>(
         n, cfg.generations, cfg.mutation_rate, cfg.elite_count, seed,
+        d_seed_tour,
         d_best_tours, d_best_lengths);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -369,6 +458,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
                           sizeof(int) * h_best_tours.size(),   cudaMemcpyDeviceToHost));
     CUDA_CHECK(cudaMemcpy(h_best_lengths.data(), d_best_lengths,
                           sizeof(int) * h_best_lengths.size(), cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaFree(d_nn_tours));
     CUDA_CHECK(cudaFree(d_best_tours));
     CUDA_CHECK(cudaFree(d_best_lengths));
 
@@ -398,7 +488,7 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        std::cout << "VERSION: cuda_ga_b2_bitmask\n";
+        std::cout << "VERSION: cuda_ga_c2_bitmask\n";
         std::cout << "NAME: " << inst.name << "\n";
         std::cout << "DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "\n";

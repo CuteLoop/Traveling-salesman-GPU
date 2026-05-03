@@ -230,7 +230,6 @@ __global__ void ga_island_kernel(int n, int generations,
                                  int* g_pop_a,
                                  int* g_pop_b,
                                  const int* __restrict__ d_dist,
-                                 const int* d_seed_tour,
                                  int* best_tours,
                                  int* best_lengths) {
     extern __shared__ int shared[];
@@ -249,27 +248,13 @@ __global__ void ga_island_kernel(int n, int generations,
         ^ (static_cast<unsigned int>(tid + 1) * 2891336453u);
     if (rng == 0) rng = 1;
 
-    if (tid == 0) {
-        for (int k = 0; k < n; ++k)
-            current[k] = d_seed_tour[k];
-        int n_swaps = 2 + (island % 8);
-        for (int s = 0; s < n_swaps; ++s) {
-            int a = rand_bounded(rng, n);
-            int b = rand_bounded(rng, n);
-            int tmp = current[a];
-            current[a] = current[b];
-            current[b] = tmp;
-        }
-    }
-    if (tid > 0) {
-        int* my_tour = current + tid * n;
-        for (int i = 0; i < n; ++i) my_tour[i] = i;
-        for (int i = n - 1; i > 0; --i) {
-            int j = rand_bounded(rng, i + 1);
-            int tmp = my_tour[i];
-            my_tour[i] = my_tour[j];
-            my_tour[j] = tmp;
-        }
+    int* my_tour = current + tid * n;
+    for (int i = 0; i < n; ++i) my_tour[i] = i;
+    for (int i = n - 1; i > 0; --i) {
+        int j = rand_bounded(rng, i + 1);
+        int tmp = my_tour[i];
+        my_tour[i] = my_tour[j];
+        my_tour[j] = tmp;
     }
     __syncthreads();
 
@@ -352,25 +337,6 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMemcpy(d_dist, inst.dist.data(),
                           sizeof(int) * inst.dist.size(), cudaMemcpyHostToDevice));
 
-    int* d_nn_tours = nullptr;
-    int* d_nn_lengths = nullptr;
-    CUDA_CHECK(cudaMalloc(&d_nn_tours, sizeof(int) * n * n));
-    CUDA_CHECK(cudaMalloc(&d_nn_lengths, sizeof(int) * n));
-
-    greedy_nn_kernel<<<n, 1>>>(d_dist, d_nn_tours, d_nn_lengths, n);
-    CUDA_CHECK(cudaGetLastError());
-    CUDA_CHECK(cudaDeviceSynchronize());
-
-    std::vector<int> h_nn_lengths(n);
-    CUDA_CHECK(cudaMemcpy(h_nn_lengths.data(), d_nn_lengths,
-                          sizeof(int) * n, cudaMemcpyDeviceToHost));
-    int best_start = static_cast<int>(std::min_element(h_nn_lengths.begin(),
-                                                       h_nn_lengths.end())
-                                      - h_nn_lengths.begin());
-    int* d_seed_tour = d_nn_tours + best_start * n;
-
-    CUDA_CHECK(cudaFree(d_nn_lengths));
-
     int* d_pop_a = nullptr;
     int* d_pop_b = nullptr;
     const size_t pop_bytes =
@@ -388,7 +354,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
 
     ga_island_kernel<<<cfg.islands, BLOCK_POP_SIZE, shared_bytes>>>(
         n, cfg.generations, cfg.mutation_rate, cfg.elite_count, seed,
-        d_pop_a, d_pop_b, d_dist, d_seed_tour,
+        d_pop_a, d_pop_b, d_dist,
         d_best_tours, d_best_lengths);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
@@ -400,7 +366,6 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMemcpy(h_best_lengths.data(), d_best_lengths,
                           sizeof(int) * h_best_lengths.size(), cudaMemcpyDeviceToHost));
 
-    CUDA_CHECK(cudaFree(d_nn_tours));
     CUDA_CHECK(cudaFree(d_pop_a));
     CUDA_CHECK(cudaFree(d_pop_b));
     CUDA_CHECK(cudaFree(d_dist));
@@ -432,7 +397,7 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        std::cout << "VERSION: GPU-Pop B5-bigpop\n";
+        std::cout << "VERSION: cuda_ga_b5_bigpop\n";
         std::cout << "NAME: " << inst.name << "  DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "  Generations: " << cfg.generations << "\n";
         const auto started_at = std::chrono::high_resolution_clock::now();

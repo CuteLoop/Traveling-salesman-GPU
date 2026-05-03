@@ -384,7 +384,7 @@ int main(int argc, char* argv[]) {
     try {
         GaConfig cfg = parse_config(argc, argv);
         TspMatrixInstance inst = load_tsplib_matrix(argv[1]);
-        std::cout << "VERSION: GPU-Pop B1+B2+B3-shuffle+B4-global\n";
+        std::cout << "VERSION: cuda_ga_b4_global\n";
         std::cout << "NAME: " << inst.name << "  DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "  Generations: " << cfg.generations << "\n";
         const auto started_at = std::chrono::high_resolution_clock::now();
