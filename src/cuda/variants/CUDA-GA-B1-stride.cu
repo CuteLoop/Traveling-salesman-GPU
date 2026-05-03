@@ -86,22 +86,16 @@ __device__ float rand_unit(unsigned int& state) {
     return static_cast<float>(xorshift32(state)) / 4294967295.0f;
 }
 
-__device__ int tour_length_const(const int* tour, int n) {
+#define STOUR(pool, idx, k) ((pool)[(idx) * stride + (k)])
+
+__device__ int tour_length_const(const int* pool, int idx, int stride, int n) {
     int total = 0;
     for (int k = 0; k < n; ++k) {
-        int a = tour[k];
-        int b = tour[(k + 1) % n];
+        int a = STOUR(pool, idx, k);
+        int b = STOUR(pool, idx, (k + 1) % n);
         total += c_dist[a * n + b];
     }
     return total;
-}
-
-__device__ void init_random_tour(int* tour, int n, unsigned int& rng) {
-    for (int i = 0; i < n; ++i) tour[i] = i;
-    for (int i = n - 1; i > 0; --i) {
-        int j = rand_bounded(rng, i + 1);
-        int tmp = tour[i]; tour[i] = tour[j]; tour[j] = tmp;
-    }
 }
 
 __device__ int tournament_select_device(const int* lengths, unsigned int& rng) {
@@ -114,39 +108,82 @@ __device__ int tournament_select_device(const int* lengths, unsigned int& rng) {
 }
 
 // B2 NOT yet applied: used[] still spills to local memory here.
-__device__ void order_crossover_device(const int* parent_a,
-                                       const int* parent_b,
-                                       int* child, int n,
+__device__ void order_crossover_device(const int* pool_a, int a_idx,
+                                       const int* pool_b, int b_idx,
+                                       int* pool_c, int c_idx,
+                                       int stride, int n,
                                        unsigned int& rng) {
     int left  = rand_bounded(rng, n);
     int right = rand_bounded(rng, n);
     if (left > right) { int tmp = left; left = right; right = tmp; }
 
     int used[MAX_CITIES];
-    for (int i = 0; i < n; ++i) { child[i] = -1; used[i] = 0; }
+    for (int i = 0; i < n; ++i) { STOUR(pool_c, c_idx, i) = -1; used[i] = 0; }
 
     for (int i = left; i <= right; ++i) {
-        child[i] = parent_a[i];
-        used[parent_a[i]] = 1;
+        STOUR(pool_c, c_idx, i) = STOUR(pool_a, a_idx, i);
+        used[STOUR(pool_a, a_idx, i)] = 1;
     }
 
     int out = (right + 1) % n;
     for (int offset = 1; offset <= n; ++offset) {
-        int gene = parent_b[(right + offset) % n];
+        int gene = STOUR(pool_b, b_idx, (right + offset) % n);
         if (used[gene]) continue;
-        child[out] = gene;
+        STOUR(pool_c, c_idx, out) = gene;
         used[gene] = 1;
         out = (out + 1) % n;
     }
 }
 
-__device__ void mutate_swap_device(int* tour, int n, float mutation_rate,
+__device__ void mutate_swap_device(int* pool, int idx, int stride, int n,
+                                   float mutation_rate,
                                    unsigned int& rng) {
     if (rand_unit(rng) > mutation_rate) return;
     int a = rand_bounded(rng, n);
     int b = rand_bounded(rng, n);
     while (b == a) b = rand_bounded(rng, n);
-    int tmp = tour[a]; tour[a] = tour[b]; tour[b] = tmp;
+    int tmp = STOUR(pool, idx, a);
+    STOUR(pool, idx, a) = STOUR(pool, idx, b);
+    STOUR(pool, idx, b) = tmp;
+}
+
+__device__ void find_top_k_reduce(const int* lengths,
+                                  int* order,
+                                  int* s_red,
+                                  int tid,
+                                  int elite_count) {
+    int found[8];
+
+    for (int pass = 0; pass < elite_count; ++pass) {
+        int key = lengths[tid];
+        for (int p = 0; p < pass; ++p) {
+            if (tid == found[p]) {
+                key = INT_MAX;
+                break;
+            }
+        }
+        s_red[tid] = key;
+        order[tid] = tid;
+        __syncthreads();
+
+        for (int half = BLOCK_POP_SIZE >> 1; half > 0; half >>= 1) {
+            if (tid < half) {
+                bool right_wins =
+                    (s_red[tid + half] < s_red[tid]) ||
+                    (s_red[tid + half] == s_red[tid] &&
+                     order[tid + half] < order[tid]);
+                if (right_wins) {
+                    s_red[tid] = s_red[tid + half];
+                    order[tid] = order[tid + half];
+                }
+            }
+            __syncthreads();
+        }
+
+        found[pass] = order[0];
+        if (tid == 0) order[pass] = found[pass];
+        __syncthreads();
+    }
 }
 
 // ─── main kernel ─────────────────────────────────────────────────────────────
@@ -166,6 +203,7 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
     int* pop_b   = pop_a  + BLOCK_POP_SIZE * stride;  // was: * n
     int* lengths = pop_b  + BLOCK_POP_SIZE * stride;  // was: * n
     int* order   = lengths + BLOCK_POP_SIZE;
+    int* s_red   = order   + BLOCK_POP_SIZE;
     // ──────────────────────────────────────────────────────────────────────
 
     unsigned int rng = seed
@@ -173,8 +211,15 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
         ^ (static_cast<unsigned int>(tid    + 1) * 2891336453u);
     if (rng == 0) rng = 1;
 
-    if (tid < BLOCK_POP_SIZE)
-        init_random_tour(pop_a + tid * stride, n, rng);  // was: tid * n
+    if (tid < BLOCK_POP_SIZE) {
+        for (int i = 0; i < n; ++i) STOUR(pop_a, tid, i) = i;
+        for (int i = n - 1; i > 0; --i) {
+            int j = rand_bounded(rng, i + 1);
+            int tmp = STOUR(pop_a, tid, i);
+            STOUR(pop_a, tid, i) = STOUR(pop_a, tid, j);
+            STOUR(pop_a, tid, j) = tmp;
+        }
+    }
     __syncthreads();
 
     int* current = pop_a;
@@ -184,34 +229,24 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
 
         // Evaluate fitness
         if (tid < BLOCK_POP_SIZE)
-            lengths[tid] = tour_length_const(current + tid * stride, n);  // was: tid * n
+            lengths[tid] = tour_length_const(current, tid, stride, n);
         __syncthreads();
 
-        // Selection sort by thread 0 (B3 not yet fixed)
-        if (tid == 0) {
-            for (int i = 0; i < BLOCK_POP_SIZE; ++i) order[i] = i;
-            for (int i = 0; i < BLOCK_POP_SIZE - 1; ++i) {
-                int best = i;
-                for (int j = i + 1; j < BLOCK_POP_SIZE; ++j)
-                    if (lengths[order[j]] < lengths[order[best]]) best = j;
-                int tmp = order[i]; order[i] = order[best]; order[best] = tmp;
-            }
-        }
-        __syncthreads();
+        find_top_k_reduce(lengths, order, s_red, tid, elite_count);
 
         // Elite copy + crossover/mutation
         if (tid < elite_count) {
             const int elite_idx = order[tid];
             for (int k = 0; k < n; ++k)
-                next[tid * stride + k] = current[elite_idx * stride + k];  // was: * n
+                STOUR(next, tid, k) = STOUR(current, elite_idx, k);
         } else if (tid < BLOCK_POP_SIZE) {
             const int pa = tournament_select_device(lengths, rng);
             const int pb = tournament_select_device(lengths, rng);
-            order_crossover_device(current + pa * stride,     // was: * n
-                                   current + pb * stride,
-                                   next    + tid * stride,
-                                   n, rng);
-            mutate_swap_device(next + tid * stride, n, mutation_rate, rng);
+            order_crossover_device(current, pa,
+                                   current, pb,
+                                   next, tid,
+                                   stride, n, rng);
+            mutate_swap_device(next, tid, stride, n, mutation_rate, rng);
         }
         __syncthreads();
 
@@ -221,20 +256,17 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
 
     // Final evaluation
     if (tid < BLOCK_POP_SIZE)
-        lengths[tid] = tour_length_const(current + tid * stride, n);
+        lengths[tid] = tour_length_const(current, tid, stride, n);
     __syncthreads();
 
-    // Write best tour to global memory (thread 0 serially finds best + copies)
-    if (tid == 0) {
-        int best_idx = 0;
-        for (int i = 1; i < BLOCK_POP_SIZE; ++i)
-            if (lengths[i] < lengths[best_idx]) best_idx = i;
+    find_top_k_reduce(lengths, order, s_red, tid, elite_count);
 
-        best_lengths[island] = lengths[best_idx];
-        // Output uses packed stride n, not n+1
-        for (int k = 0; k < n; ++k)
-            best_tours[island * n + k] = current[best_idx * stride + k];
-    }
+    if (tid == 0) best_lengths[island] = lengths[order[0]];
+    for (int k = tid; k < n; k += BLOCK_POP_SIZE)
+        best_tours[island * n + k] = STOUR(current, order[0], k);
+    __syncthreads();
+
+#undef STOUR
 }
 
 // ─── host code ───────────────────────────────────────────────────────────────
@@ -258,8 +290,8 @@ static GaConfig parse_config(int argc, char* argv[]) {
     if (cfg.generations < 1)     throw std::runtime_error("generations must be >= 1");
     if (cfg.mutation_rate < 0.f || cfg.mutation_rate > 1.f)
         throw std::runtime_error("mutation_rate must be in [0,1]");
-    if (cfg.elite_count < 1 || cfg.elite_count >= BLOCK_POP_SIZE)
-        throw std::runtime_error("elite_count must be in [1, BLOCK_POP_SIZE)");
+    if (cfg.elite_count < 1 || cfg.elite_count > 8 || cfg.elite_count >= BLOCK_POP_SIZE)
+        throw std::runtime_error("elite_count must be in [1, min(8, BLOCK_POP_SIZE))");
     return cfg;
 }
 
@@ -284,9 +316,10 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     CUDA_CHECK(cudaMalloc(&d_best_lengths, sizeof(int) * cfg.islands));
 
     // ── B1 FIX: shared memory now uses stride = n + 1 ────────────────────
+    const int stride = n + 1;
     const size_t shared_ints =
-        2 * static_cast<size_t>(BLOCK_POP_SIZE) * (n + 1) +  // pop_a + pop_b (padded)
-        2 * static_cast<size_t>(BLOCK_POP_SIZE);              // lengths + order
+        2 * static_cast<size_t>(BLOCK_POP_SIZE) * stride +
+        3 * static_cast<size_t>(BLOCK_POP_SIZE);
     const size_t shared_bytes = sizeof(int) * shared_ints;
     // ──────────────────────────────────────────────────────────────────────
 

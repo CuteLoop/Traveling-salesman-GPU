@@ -43,7 +43,22 @@ SEED="${SEED:-42}"
 
 mkdir -p results
 
-if [ ! -x ./build/CUDA-GA-B4-smem ]; then
+get_dimension() {
+  awk -F: '
+    /^[[:space:]]*DIMENSION[[:space:]]*:/ {
+      gsub(/[[:space:]]/, "", $2);
+      print $2;
+      exit
+    }
+  ' "$1"
+}
+
+DATASET_DIM="$(get_dimension "$DATASET")"
+if [ -z "$DATASET_DIM" ]; then
+  DATASET_DIM="unknown"
+fi
+
+if [ ! -x ./build/CUDA-GA-B5-bigpop ]; then
   echo "Building all CUDA versions..."
   make all_cuda_versions
 fi
@@ -70,12 +85,13 @@ run_variant cuda_ga_b2_bitmask ./build/CUDA-GA-B2-bitmask "$DATASET" "$ISLANDS" 
 run_variant cuda_ga_b3_reduce ./build/CUDA-GA-B3-reduce "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$SEED"
 run_variant cuda_ga_b3_shuffle ./build/CUDA-GA-B3-shuffle "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$SEED"
 run_variant cuda_ga_b4_global ./build/CUDA-GA-B4-global "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$SEED"
+run_variant cuda_ga_b5_bigpop ./build/CUDA-GA-B5-bigpop "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$SEED"
 
-# B4-smem only supports n <= 99. Berlin52 and smoke_20 are safe.
-if [[ "$DATASET" == *"berlin52"* || "$DATASET" == *"smoke_20"* ]]; then
+# B4-smem only supports n <= 99.
+if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
   run_variant cuda_ga_b4_smem ./build/CUDA-GA-B4-smem "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$SEED"
 else
-  echo "Skipping CUDA-GA-B4-smem for dataset '$DATASET' (requires n <= 99)."
+  echo "Skipping CUDA-GA-B4-smem for dataset '$DATASET' (dimension ${DATASET_DIM}; requires n <= 99)."
 fi
 
 echo "Done. Outputs are in results/ with suffix _${DATASET_TAG}_${SLURM_JOB_ID}.txt"

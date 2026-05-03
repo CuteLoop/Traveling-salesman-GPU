@@ -117,24 +117,18 @@ __device__ float rand_unit(unsigned int& state) {
     return static_cast<float>(xorshift32(state)) / 4294967295.0f;
 }
 
+#define STOUR(pool, idx, k) ((pool)[(idx) * stride + (k)])
+
 // B4-smem: tour_length reads from shared memory s_dist instead of constant/global
 __device__ int tour_length_smem(const int* __restrict__ s_dist,
-                                 const int* tour, int n) {
+                                 const int* pool, int idx, int stride, int n) {
     int total = 0;
     for (int k = 0; k < n; ++k) {
-        int a = tour[k];
-        int b = tour[(k + 1) % n];
+        int a = STOUR(pool, idx, k);
+        int b = STOUR(pool, idx, (k + 1) % n);
         total += s_dist[a * n + b];   // shared memory: ~4 cycle latency
     }
     return total;
-}
-
-__device__ void init_random_tour(int* tour, int n, unsigned int& rng) {
-    for (int i = 0; i < n; ++i) tour[i] = i;
-    for (int i = n - 1; i > 0; --i) {
-        int j = rand_bounded(rng, i + 1);
-        int tmp = tour[i]; tour[i] = tour[j]; tour[j] = tmp;
-    }
 }
 
 __device__ int tournament_select_device(const int* lengths, unsigned int& rng) {
@@ -159,62 +153,76 @@ __device__ int tournament_select_device(const int* lengths, unsigned int& rng) {
     (c) <  96 ? (used2 >> ((c) - 64)) & 1u :                      \
                 (used3 >> ((c) - 96)) & 1u )
 
-__device__ void order_crossover_device(const int* parent_a, const int* parent_b,
-                                       int* child, int n, unsigned int& rng) {
+__device__ void order_crossover_device(const int* pool_a, int a_idx,
+                                       const int* pool_b, int b_idx,
+                                       int* pool_c, int c_idx,
+                                       int stride, int n, unsigned int& rng) {
     int left  = rand_bounded(rng, n);
     int right = rand_bounded(rng, n);
     if (left > right) { int tmp = left; left = right; right = tmp; }
     uint32_t used0 = 0u, used1 = 0u, used2 = 0u, used3 = 0u;
-    for (int i = 0; i < n; ++i) child[i] = -1;
-    for (int i = left; i <= right; ++i) { child[i] = parent_a[i]; MARK(parent_a[i]); }
+    for (int i = 0; i < n; ++i) STOUR(pool_c, c_idx, i) = -1;
+    for (int i = left; i <= right; ++i) {
+        STOUR(pool_c, c_idx, i) = STOUR(pool_a, a_idx, i);
+        MARK(STOUR(pool_a, a_idx, i));
+    }
     int out = (right + 1) % n;
     for (int offset = 1; offset <= n; ++offset) {
-        int gene = parent_b[(right + offset) % n];
+        int gene = STOUR(pool_b, b_idx, (right + offset) % n);
         if (ISSET(gene)) continue;
-        child[out] = gene; MARK(gene); out = (out + 1) % n;
+        STOUR(pool_c, c_idx, out) = gene; MARK(gene); out = (out + 1) % n;
     }
 }
 #undef MARK
 #undef ISSET
 
-__device__ void mutate_swap_device(int* tour, int n, float mutation_rate,
+__device__ void mutate_swap_device(int* pool, int idx, int stride, int n,
+                                   float mutation_rate,
                                    unsigned int& rng) {
     if (rand_unit(rng) > mutation_rate) return;
     int a = rand_bounded(rng, n);
     int b = rand_bounded(rng, n);
     while (b == a) b = rand_bounded(rng, n);
-    int tmp = tour[a]; tour[a] = tour[b]; tour[b] = tmp;
+    int tmp = STOUR(pool, idx, a); STOUR(pool, idx, a) = STOUR(pool, idx, b); STOUR(pool, idx, b) = tmp;
 }
 
-__device__ void find_top2_warp(const int* lengths, int* out_e0, int* out_e1) {
-    const unsigned int FULL_MASK = 0xFFFFFFFFu;
-    int my_len = lengths[threadIdx.x], my_idx = threadIdx.x;
-    for (int m = 16; m > 0; m >>= 1) {
-        int ol = __shfl_xor_sync(FULL_MASK, my_len, m);
-        int oi = __shfl_xor_sync(FULL_MASK, my_idx, m);
-        if (ol < my_len || (ol == my_len && oi < my_idx)) { my_len = ol; my_idx = oi; }
-    }
-    int e0 = __shfl_sync(FULL_MASK, my_idx, 0);
-    my_len = (threadIdx.x == e0) ? INT_MAX : lengths[threadIdx.x];
-    my_idx = threadIdx.x;
-    for (int m = 16; m > 0; m >>= 1) {
-        int ol = __shfl_xor_sync(FULL_MASK, my_len, m);
-        int oi = __shfl_xor_sync(FULL_MASK, my_idx, m);
-        if (ol < my_len || (ol == my_len && oi < my_idx)) { my_len = ol; my_idx = oi; }
-    }
-    int e1 = __shfl_sync(FULL_MASK, my_idx, 0);
-    if (threadIdx.x == 0) { *out_e0 = e0; *out_e1 = e1; }
-}
+__device__ void find_top_k_reduce(const int* lengths,
+                                  int* order,
+                                  int* s_red,
+                                  int tid,
+                                  int elite_count) {
+    int found[8];
 
-__device__ int find_best_warp(const int* lengths) {
-    const unsigned int FULL_MASK = 0xFFFFFFFFu;
-    int my_len = lengths[threadIdx.x], my_idx = threadIdx.x;
-    for (int m = 16; m > 0; m >>= 1) {
-        int ol = __shfl_xor_sync(FULL_MASK, my_len, m);
-        int oi = __shfl_xor_sync(FULL_MASK, my_idx, m);
-        if (ol < my_len || (ol == my_len && oi < my_idx)) { my_len = ol; my_idx = oi; }
+    for (int pass = 0; pass < elite_count; ++pass) {
+        int key = lengths[tid];
+        for (int p = 0; p < pass; ++p) {
+            if (tid == found[p]) {
+                key = INT_MAX;
+                break;
+            }
+        }
+        s_red[tid] = key;
+        order[tid] = tid;
+        __syncthreads();
+
+        for (int half = BLOCK_POP_SIZE >> 1; half > 0; half >>= 1) {
+            if (tid < half) {
+                bool right_wins =
+                    (s_red[tid + half] < s_red[tid]) ||
+                    (s_red[tid + half] == s_red[tid] &&
+                     order[tid + half] < order[tid]);
+                if (right_wins) {
+                    s_red[tid] = s_red[tid + half];
+                    order[tid] = order[tid + half];
+                }
+            }
+            __syncthreads();
+        }
+
+        found[pass] = order[0];
+        if (tid == 0) order[pass] = found[pass];
+        __syncthreads();
     }
-    return __shfl_sync(FULL_MASK, my_idx, 0);
 }
 
 // ─── main kernel (B1 + B2 + B3-shuffle + B4-smem) ────────────────────────────
@@ -240,7 +248,8 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
     int* pop_b   = pop_a  + BLOCK_POP_SIZE * stride;
     int* lengths = pop_b  + BLOCK_POP_SIZE * stride;
     int* order   = lengths + BLOCK_POP_SIZE;
-    int* s_dist  = order   + BLOCK_POP_SIZE;   // ← B4-smem: dist in shared memory
+    int* s_red   = order   + BLOCK_POP_SIZE;
+    int* s_dist  = s_red   + BLOCK_POP_SIZE;   // ← B4-smem: dist in shared memory
 
     // ── B4-smem: cooperative load of dist matrix ─────────────────────────
     // All 32 threads load 9801/32 ≈ 306 elements each (for n=99).
@@ -256,8 +265,15 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
         ^ (static_cast<unsigned int>(tid    + 1) * 2891336453u);
     if (rng == 0) rng = 1;
 
-    if (tid < BLOCK_POP_SIZE)
-        init_random_tour(pop_a + tid * stride, n, rng);
+    if (tid < BLOCK_POP_SIZE) {
+        for (int i = 0; i < n; ++i) STOUR(pop_a, tid, i) = i;
+        for (int i = n - 1; i > 0; --i) {
+            int j = rand_bounded(rng, i + 1);
+            int tmp = STOUR(pop_a, tid, i);
+            STOUR(pop_a, tid, i) = STOUR(pop_a, tid, j);
+            STOUR(pop_a, tid, j) = tmp;
+        }
+    }
     __syncthreads();
 
     int* current = pop_a;
@@ -265,22 +281,21 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
 
     for (int generation = 0; generation < generations; ++generation) {
         if (tid < BLOCK_POP_SIZE)
-            lengths[tid] = tour_length_smem(s_dist, current + tid * stride, n);  // B4-smem
+            lengths[tid] = tour_length_smem(s_dist, current, tid, stride, n);
         __syncthreads();
 
-        find_top2_warp(lengths, &order[0], &order[1]);
-        __syncthreads();
+        find_top_k_reduce(lengths, order, s_red, tid, elite_count);
 
         if (tid < elite_count) {
             const int ei = order[tid];
             for (int k = 0; k < n; ++k)
-                next[tid * stride + k] = current[ei * stride + k];
+                STOUR(next, tid, k) = STOUR(current, ei, k);
         } else if (tid < BLOCK_POP_SIZE) {
             const int pa = tournament_select_device(lengths, rng);
             const int pb = tournament_select_device(lengths, rng);
-            order_crossover_device(current + pa * stride, current + pb * stride,
-                                   next    + tid * stride, n, rng);
-            mutate_swap_device(next + tid * stride, n, mutation_rate, rng);
+            order_crossover_device(current, pa, current, pb,
+                                   next, tid, stride, n, rng);
+            mutate_swap_device(next, tid, stride, n, mutation_rate, rng);
         }
         __syncthreads();
         int* tmp = current; current = next; next = tmp;
@@ -288,13 +303,17 @@ __global__ void ga_island_kernel(int n, int generations, float mutation_rate,
     }
 
     if (tid < BLOCK_POP_SIZE)
-        lengths[tid] = tour_length_smem(s_dist, current + tid * stride, n);
+        lengths[tid] = tour_length_smem(s_dist, current, tid, stride, n);
     __syncthreads();
 
-    int best_idx = find_best_warp(lengths);
-    if (tid == 0) best_lengths[island] = lengths[best_idx];
+    find_top_k_reduce(lengths, order, s_red, tid, elite_count);
+
+    if (tid == 0) best_lengths[island] = lengths[order[0]];
     for (int k = tid; k < n; k += BLOCK_POP_SIZE)
-        best_tours[island * n + k] = current[best_idx * stride + k];
+        best_tours[island * n + k] = STOUR(current, order[0], k);
+    __syncthreads();
+
+    #undef STOUR
 }
 
 // ─── host code ───────────────────────────────────────────────────────────────
@@ -318,8 +337,8 @@ static GaConfig parse_config(int argc, char* argv[]) {
     if (cfg.generations < 1)     throw std::runtime_error("generations must be >= 1");
     if (cfg.mutation_rate < 0.f || cfg.mutation_rate > 1.f)
         throw std::runtime_error("mutation_rate in [0,1]");
-    if (cfg.elite_count < 1 || cfg.elite_count >= BLOCK_POP_SIZE)
-        throw std::runtime_error("elite_count in [1, BLOCK_POP_SIZE)");
+    if (cfg.elite_count < 1 || cfg.elite_count > 8 || cfg.elite_count >= BLOCK_POP_SIZE)
+        throw std::runtime_error("elite_count in [1, min(8, BLOCK_POP_SIZE))");
     return cfg;
 }
 
@@ -340,7 +359,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
         : cfg.seed;
 
     // Print shared memory breakdown for this n
-    size_t pop_bytes  = sizeof(int) * (2 * BLOCK_POP_SIZE * (n + 1) + 2 * BLOCK_POP_SIZE);
+    size_t pop_bytes  = sizeof(int) * (2 * BLOCK_POP_SIZE * (n + 1) + 3 * BLOCK_POP_SIZE);
     size_t dist_bytes = sizeof(int) * n * n;
     std::cout << "Shared memory breakdown for n=" << n << ":\n"
               << "  population: " << pop_bytes  << " bytes\n"
@@ -363,7 +382,7 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
     // Shared memory: pop arrays + dist matrix
     const size_t shared_bytes =
         sizeof(int) * (2 * BLOCK_POP_SIZE * (n + 1) +
-                       2 * BLOCK_POP_SIZE +
+                       3 * BLOCK_POP_SIZE +
                        n * n);                   // ← includes s_dist
 
     // Report occupancy

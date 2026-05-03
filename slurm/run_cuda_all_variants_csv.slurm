@@ -1,5 +1,5 @@
 #!/bin/bash
-# Runs all current CUDA variants multiple times and writes one CSV.
+# Runs all current CUDA variants multiple times and writes per-run and average CSVs.
 #
 # Usage:
 #   sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
@@ -7,6 +7,7 @@
 # Notes:
 # - Each run uses `seed = SEED_BASE + run_index - 1` so stochastic quality can be compared.
 # - CUDA timing is parsed from program output when available.
+# - Assumes `make all_cuda_versions` can build the CUDA binaries from the repo root.
 
 #SBATCH --job-name=tsp_cuda_csv
 #SBATCH --account=ece569
@@ -56,11 +57,12 @@ mkdir -p results build
 
 JOB_TAG="${SLURM_JOB_ID:-manual}"
 DATASET_TAG="$(basename "$DATASET" .tsp)"
-CSV_OUT="results/cuda_all_variants_${DATASET_TAG}_${JOB_TAG}.csv"
+RUN_CSV="results/cuda_all_variants_runs_${DATASET_TAG}_${JOB_TAG}.csv"
+AVG_CSV="results/cuda_all_variants_avg_${DATASET_TAG}_${JOB_TAG}.csv"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tsp_cuda_csv_${JOB_TAG}_XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,status,notes" > "$CSV_OUT"
+echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,status,notes" > "$RUN_CSV"
 
 get_dimension() {
   awk -F: '
@@ -76,19 +78,6 @@ DATASET_DIM="$(get_dimension "$DATASET")"
 if [ -z "$DATASET_DIM" ]; then
   DATASET_DIM="unknown"
 fi
-
-compile_variant() {
-  local binary="$1"
-  local source="$2"
-
-  if [ -x "$binary" ]; then
-    return 0
-  fi
-
-  echo "Building $(basename "$binary") from $source"
-  nvcc -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo \
-    -Isrc/cpp -o "$binary" "$source" src/cpp/tsplib_parser.cpp
-}
 
 run_and_record() {
   local variant="$1"
@@ -153,28 +142,12 @@ run_and_record() {
     notes="$(tail -n 1 "$stdout_file" | tr ',' ';' | tr '\r\n' '  ')"
   fi
 
-  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${status},${notes}" >> "$CSV_OUT"
+  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${status},${notes}" >> "$RUN_CSV"
 }
 
-compile_variant "build/GPU-Naive" "src/cuda/GPU-Naive.cu"
-compile_variant "build/CUDA-GA" "src/cuda/CUDA-GA.cu"
-compile_variant "build/CUDA-GA-GPU-Pop" "src/cuda/CUDA-GA-GPU-Pop.cu"
-compile_variant "build/CUDA-GA-GPU-Pop-bankconflict" "src/cuda/variants/CUDA-GA-GPU-Pop-bankconflict.cu"
-compile_variant "build/CUDA-GA-GPU-Pop-bitset" "src/cuda/variants/CUDA-GA-GPU-Pop-bitset.cu"
-compile_variant "build/GA-GPU-POP-ParallelSort" "src/cuda/variants/CUDA-GA-GPU-Pop-ParallelSort.cu"
-compile_variant "build/GA-GPU-POP-AoS" "src/cuda/variants/CUDA-GA-GPU-Pop-AoS.cu"
-compile_variant "build/GA-GPU-POP-GlobalDist" "src/cuda/variants/CUDA-GA-GPU-Pop-GlobalDist.cu"
-compile_variant "build/GA-GPU-POP-VerboseComments" "src/cuda/variants/CUDA-GA-GPU-Pop-VerboseComments.cu"
-compile_variant "build/CUDA-GA-B1-stride" "src/cuda/variants/CUDA-GA-B1-stride.cu"
-compile_variant "build/CUDA-GA-B2-bitmask" "src/cuda/variants/CUDA-GA-B2-bitmask.cu"
-compile_variant "build/CUDA-GA-B3-reduce" "src/cuda/variants/CUDA-GA-B3-reduce.cu"
-compile_variant "build/CUDA-GA-B3-shuffle" "src/cuda/variants/CUDA-GA-B3-shuffle.cu"
-compile_variant "build/CUDA-GA-B4-global" "src/cuda/variants/CUDA-GA-B4-global.cu"
-
-if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
-  compile_variant "build/CUDA-GA-B4-smem" "src/cuda/variants/CUDA-GA-B4-smem.cu"
-else
-  echo "Skipping build/CUDA-GA-B4-smem for dataset dimension ${DATASET_DIM} (> 99 or unknown)"
+if [ ! -x ./build/CUDA-GA-B5-bigpop ]; then
+  echo "Building CUDA variants with make all_cuda_versions..."
+  make all_cuda_versions
 fi
 
 for run_index in $(seq 1 "$RUNS"); do
@@ -224,12 +197,76 @@ for run_index in $(seq 1 "$RUNS"); do
   run_and_record "cuda_ga_b4_global" "build/CUDA-GA-B4-global" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
     ./build/CUDA-GA-B4-global "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
 
+  run_and_record "cuda_ga_b5_bigpop" "build/CUDA-GA-B5-bigpop" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
+    ./build/CUDA-GA-B5-bigpop "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
+
   if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
     run_and_record "cuda_ga_b4_smem" "build/CUDA-GA-B4-smem" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
       ./build/CUDA-GA-B4-smem "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
   else
-    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$CSV_OUT"
+    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$RUN_CSV"
   fi
 done
 
-echo "Wrote ${CSV_OUT}"
+awk -F, '
+BEGIN {
+  OFS=",";
+  print "variant,version,dataset,runs,ok_runs,target_hits,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed";
+}
+NR == 1 { next }
+{
+  variant = $1;
+  version[variant] = $3;
+  dataset[variant] = $4;
+  runs[variant]++;
+
+  if ($16 == "ok") {
+    ok[variant]++;
+    if ($15 == "yes") {
+      hit_count[variant]++;
+    }
+    if ($12 != "NA") {
+      len_sum[variant] += $12;
+      len_sq_sum[variant] += ($12 * $12);
+      len_count[variant]++;
+    }
+    if ($13 != "NA") {
+      time_sum[variant] += $13;
+      time_sq_sum[variant] += ($13 * $13);
+      time_count[variant]++;
+    }
+    if ($14 != "NA") {
+      gen_sum[variant] += $14;
+      gen_count[variant]++;
+    }
+  }
+}
+END {
+  for (variant in runs) {
+    mean_len = (len_count[variant] > 0) ? len_sum[variant] / len_count[variant] : "NA";
+    mean_time = (time_count[variant] > 0) ? time_sum[variant] / time_count[variant] : "NA";
+    mean_gen = (gen_count[variant] > 0) ? gen_sum[variant] / gen_count[variant] : "NA";
+
+    if (len_count[variant] > 1) {
+      len_var = (len_sq_sum[variant] - ((len_sum[variant] * len_sum[variant]) / len_count[variant])) / (len_count[variant] - 1);
+      if (len_var < 0) len_var = 0;
+      len_stddev = sqrt(len_var);
+    } else {
+      len_stddev = "NA";
+    }
+
+    if (time_count[variant] > 1) {
+      time_var = (time_sq_sum[variant] - ((time_sum[variant] * time_sum[variant]) / time_count[variant])) / (time_count[variant] - 1);
+      if (time_var < 0) time_var = 0;
+      time_stddev = sqrt(time_var);
+    } else {
+      time_stddev = "NA";
+    }
+
+    print variant, version[variant], dataset[variant], runs[variant], ok[variant] + 0, hit_count[variant] + 0, mean_len, len_stddev, mean_time, time_stddev, mean_gen;
+  }
+}
+' "$RUN_CSV" > "$AVG_CSV"
+
+echo "Per-run CSV: $RUN_CSV"
+echo "Average CSV: $AVG_CSV"
