@@ -97,7 +97,7 @@ NVCCFLAGS  ?= -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo -Isrc
 
 LDLIBS_SEQ := -lm
 
-.PHONY: all all_cuda_versions clean dirs info sbatch_cuda_smoke20 sbatch_cuda_berlin52 print_cuda_matrix_config
+.PHONY: all all_cuda_versions clean dirs info sbatch_cuda_smoke20 sbatch_cuda_berlin52 print_cuda_matrix_config refresh_readme_cuda_results
 
 all: dirs $(SEQ_BIN) $(NAIVE_BIN) $(HYBRID_BIN) $(HYBRID_NO_GREEDY_BIN) $(ISLAND_BIN) $(ISLAND_BANKCONFLICT_BIN) $(ISLAND_BITSET_BIN) $(ISLAND_PARALLEL_SORT_BIN) $(ISLAND_AOS_BIN) $(ISLAND_GLOBAL_DIST_BIN) $(ISLAND_VERBOSE_COMMENTS_BIN) $(B1_STRIDE_BIN) $(B2_BITMASK_BIN) $(B3_REDUCE_BIN) $(B3_SHUFFLE_BIN) $(B4_GLOBAL_BIN) $(B4_SMEM_BIN) $(B5_BIGPOP_BIN) $(C1_STRIDE_BIN) $(C2_BITMASK_BIN) $(C3_REDUCE_BIN) $(C4_GLOBAL_BIN) $(C5_BIGPOP_BIN)
 
@@ -153,6 +153,9 @@ sbatch_cuda_smoke20:
 
 sbatch_cuda_berlin52:
 	$(SBATCH) --export=ALL,DATASET=$(CUDA_MATRIX_BERLIN_DATASET),RUNS=$(CUDA_MATRIX_RUNS),ISLANDS=$(CUDA_MATRIX_ISLANDS),GENERATIONS=$(CUDA_MATRIX_GENERATIONS),MUTATION=$(CUDA_MATRIX_MUTATION),ELITE_POP=$(CUDA_MATRIX_ELITE_POP),ELITE_HYBRID=$(CUDA_MATRIX_ELITE_HYBRID),POP_HYBRID=$(CUDA_MATRIX_POP_HYBRID),SEED_BASE=$(CUDA_MATRIX_SEED_BASE) slurm/run_cuda_all_variants_csv.slurm
+
+refresh_readme_cuda_results:
+	python scripts/generate_cuda_results_readme.py
 
 $(SEQ_BIN): $(SEQ_MAIN) $(SEQ_SRCS)
 	$(CC) $(CFLAGS) -o $@ $^ $(LDLIBS_SEQ)

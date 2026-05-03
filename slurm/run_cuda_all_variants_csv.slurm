@@ -79,6 +79,28 @@ if [ -z "$DATASET_DIM" ]; then
   DATASET_DIM="unknown"
 fi
 
+build_cuda_variants() {
+  local attempt=1
+  local max_attempts=2
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    echo "Building CUDA variants with make all_cuda_versions (attempt ${attempt}/${max_attempts})..."
+    if make all_cuda_versions; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      echo "Build failed; cleaning build directory before retry."
+      rm -rf build
+      mkdir -p build
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "Error: failed to build CUDA variants after ${max_attempts} attempts."
+  return 1
+}
+
 run_and_record() {
   local variant="$1"
   local binary="$2"
@@ -118,7 +140,11 @@ run_and_record() {
   fi
 
   local elapsed_ms=""
-  elapsed_ms="$(awk -F': ' '/^CUDA kernel elapsed ms:/ {print $2; exit}' "$stdout_file")"
+  elapsed_ms="$(awk -F': ' '
+    /^CUDA kernel elapsed ms:/ {print $2; exit}
+    /^kernel_ms:/ {print $2; exit}
+    /^total_ms:/ {print $2; exit}
+  ' "$stdout_file")"
   if [ -z "$elapsed_ms" ]; then
     elapsed_ms="NA"
   fi
@@ -159,10 +185,18 @@ run_and_record() {
   echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${best_tour_path},${status},${notes}" >> "$RUN_CSV"
 }
 
-if [ ! -x ./build/CUDA-GA-C5-bigpop ]; then
-  echo "Building CUDA variants with make all_cuda_versions..."
-  make all_cuda_versions
-fi
+# Always invoke the build step. Make's own dependency tracking rebuilds only
+# targets whose .cu source is newer than the cached binary, so this is cheap
+# when nothing changed.
+#
+# We deliberately do NOT short-circuit on the existence of any single binary
+# (the previous guard was `if [ ! -x ./build/CUDA-GA-C5-bigpop ]`). That guard
+# caused stale binaries to silently survive source edits: when a print
+# statement (e.g. `CUDA kernel elapsed ms:`) was added to a variant after its
+# binary had been cached, the SLURM sweep kept running the old binary and the
+# stdout-grep extractor produced NA in the resulting CSV.
+echo "Ensuring CUDA variants are up to date..."
+build_cuda_variants
 
 for run_index in $(seq 1 "$RUNS"); do
   seed=$((SEED_BASE + run_index - 1))

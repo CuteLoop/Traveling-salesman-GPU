@@ -64,52 +64,6 @@ static int cpu_tour_length(const std::vector<int>& dist,
     return total;
 }
 
-static TourResult nearest_neighbor_best_start(const std::vector<int>& dist, int n) {
-    TourResult best;
-
-    for (int start = 0; start < n; ++start) {
-        std::vector<int> tour(n);
-        std::vector<char> visited(n, 0);
-
-        int current = start;
-        tour[0] = current;
-        visited[current] = 1;
-        int total = 0;
-
-        for (int pos = 1; pos < n; ++pos) {
-            int best_city = -1;
-            int best_dist = std::numeric_limits<int>::max();
-
-            for (int candidate = 0; candidate < n; ++candidate) {
-                if (visited[candidate]) continue;
-
-                int d = dist[current * n + candidate];
-                if (d < best_dist) {
-                    best_dist = d;
-                    best_city = candidate;
-                }
-            }
-
-            if (best_city == -1) {
-                throw std::runtime_error("Nearest-neighbor construction failed");
-            }
-
-            tour[pos] = best_city;
-            visited[best_city] = 1;
-            total += best_dist;
-            current = best_city;
-        }
-
-        total += dist[current * n + start];
-        if (total < best.length) {
-            best.tour = tour;
-            best.length = total;
-        }
-    }
-
-    return best;
-}
-
 static GaConfig parse_config(int argc, char* argv[]) {
     GaConfig cfg;
     if (argc > 2) cfg.population_size = std::stoi(argv[2]);

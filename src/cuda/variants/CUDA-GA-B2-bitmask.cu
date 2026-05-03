@@ -41,6 +41,7 @@
 //   nvprof: local_load_transactions = 0, local_store_transactions = 0
 
 #include "tsplib_parser.h"
+#include "result_writer.h"
 
 #include <cuda_runtime.h>
 #include <algorithm>
@@ -413,6 +414,23 @@ int main(int argc, char* argv[]) {
         std::cout << "Best tour (0-based indices):\n";
         for (int city : best.tour) std::cout << city << " ";
         std::cout << best.tour.front() << "\n";
+
+        ResultRow row;
+        row.version               = "cuda_ga_b2_bitmask";
+        row.dataset               = argv[1];
+        row.seed                  = static_cast<long long>(cfg.seed);
+        row.islands               = cfg.islands;
+        row.population            = cfg.islands * BLOCK_POP_SIZE;
+        row.generations_requested = cfg.generations;
+        row.mutation_rate         = cfg.mutation_rate;
+        row.elite_count           = cfg.elite_count;
+        row.best_length           = best.length;
+        row.kernel_ms             = -1.0;
+        row.total_ms              = elapsed_ms.count();
+        row.generations_completed = cfg.generations;
+        row.target_reached        = -1;
+        row.best_tour             = best.tour;
+        write_result_row(row);
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

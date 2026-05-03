@@ -58,10 +58,13 @@ if [ -z "$DATASET_DIM" ]; then
   DATASET_DIM="unknown"
 fi
 
-if [ ! -x ./build/CUDA-GA-B5-bigpop ]; then
-  echo "Building all CUDA versions..."
-  make all_cuda_versions
-fi
+# Always rebuild via make. The previous guard
+# (`if [ ! -x ./build/CUDA-GA-B5-bigpop ]`) caused stale binaries to silently
+# survive source edits when only some variants had been touched, producing NA
+# rows in downstream CSVs. Make's own dependency tracking is cheap when
+# nothing is out of date.
+echo "Ensuring CUDA variants are up to date..."
+make all_cuda_versions
 
 DATASET_TAG="$(basename "$DATASET" .tsp)"
 
