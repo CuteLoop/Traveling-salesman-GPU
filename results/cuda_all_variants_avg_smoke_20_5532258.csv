@@ -1,0 +1,23 @@
+variant,version,dataset,runs,ok_runs,target_hits,best_reported_length,best_cuda_elapsed_ms,best_tour_path,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed
+cuda_ga_gpu_pop_bitset,GPU-Pop Bitset Variant,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,115.2,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,115.121,0.0912264,2000
+cuda_ga_b3_reduce,cuda_ga_b3_reduce,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,115.818,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,117.327,0.642565,NA
+cuda_ga_gpu_pop,GPU-Pop Control,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,134.231,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,122.043,2.8705,2000
+gpu_naive,gpu_naive,sequential/tests/fixtures/smoke_20.tsp,20,20,0,80,0.126005,8 9 18 6 5 19 4 14 13 11 12 15 0 7 3 17 16 1 2 10 8,80,0,0.13027,0.00570657,NA
+cuda_ga_gpu_pop_global_dist,GA-GPU-POP-GlobalDist,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,149.144,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,149.132,0.215895,2000
+cuda_ga_gpu_pop_bankconflict,GPU-Pop Bank-Conflict Variant,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,121.739,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,120.467,0.315725,2000
+cuda_ga_c5_bigpop,cuda_ga_c5_bigpop,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,1686.01,16 17 3 7 14 13 11 12 6 5 19 4 10 8 9 18 15 0 2 1 16,73,0,1683.7,1.4726,NA
+cuda_ga_c4_global,cuda_ga_c4_global,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,118.22,14 13 7 17 3 16 1 2 0 15 12 11 6 18 9 8 10 4 19 5 14,73,0,117.825,0.604088,NA
+cuda_ga_b5_bigpop,cuda_ga_b5_bigpop,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,1682.8,15 12 11 13 18 9 8 10 4 19 5 6 14 7 3 17 16 1 2 0 15,73,0,1683.5,1.52303,NA
+cuda_ga_b4_global,cuda_ga_b4_global,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,117.568,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,117.231,0.520973,NA
+cuda_ga_b3_shuffle,GPU-Pop B1+B2+B3-shuffle,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,116.617,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,117.497,0.673584,NA
+cuda_ga_gpu_pop_parallel_sort,GA-GPU-POP-ParallelSort,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,124.759,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,125.496,0.468964,NA
+cuda_ga_b4_smem,GPU-Pop B1+B2+B3-shuffle+B4-smem,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,115.99,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,117.644,1.43144,NA
+cuda_ga_c2_bitmask,cuda_ga_c2_bitmask,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,117.057,14 13 7 17 3 16 1 2 0 15 12 11 6 18 9 8 10 4 19 5 14,73,0,117.256,0.503559,NA
+cuda_ga_c1_stride,cuda_ga_c1_stride,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,126.565,14 13 7 17 3 16 1 2 0 15 12 11 6 18 9 8 10 4 19 5 14,73,0,126.115,0.737526,NA
+cuda_ga_gpu_pop_aos,GA-GPU-POP-AoS,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,626.004,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,626.005,0.382793,NA
+cuda_ga_b2_bitmask,cuda_ga_b2_bitmask,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,117.454,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,117.41,0.581083,NA
+cuda_ga_b1_stride,cuda_ga_b1_stride,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,125.035,8 10 4 19 5 14 7 17 3 16 1 2 0 15 12 11 13 6 18 9 8,73,0,125.272,0.658154,NA
+cuda_ga_gpu_pop_verbose_comments,GA-GPU-POP-VerboseComments,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,203.775,18 13 11 12 15 0 2 1 16 3 17 7 14 6 5 19 4 10 8 9 18,73,0,204.368,0.72499,NA
+cuda_ga_c3_reduce,cuda_ga_c3_reduce,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,117.264,14 13 7 17 3 16 1 2 0 15 12 11 6 18 9 8 10 4 19 5 14,73,0,117.369,0.587855,NA
+cuda_ga_no_greedy,cuda_ga_no_greedy,sequential/tests/fixtures/smoke_20.tsp,20,20,0,73,561.047,18 13 14 7 17 3 16 1 2 0 15 12 11 6 5 19 4 10 8 9 18,73.7,1.17429,564.083,6.09395,NA
+cuda_ga,cuda_ga,sequential/tests/fixtures/smoke_20.tsp,20,20,0,74,561.942,7 14 6 5 19 4 10 8 9 18 13 11 12 15 0 3 17 16 1 2 7,74.65,0.48936,561.685,2.18129,NA
