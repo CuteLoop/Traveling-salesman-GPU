@@ -1,0 +1,17 @@
+variant,version,dataset,runs,ok_runs,target_hits,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed
+cuda_ga_gpu_pop_bitset,GPU-Pop Bitset Variant,data/berlin52.tsp,20,20,0,9125.4,120.514,284.177,0.341427,2000
+cuda_ga_b3_reduce,GPU-Pop B1+B2+B3-reduce,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_gpu_pop,GPU-Pop Control,data/berlin52.tsp,20,20,0,9125.4,120.514,334.398,4.3233,2000
+gpu_naive,gpu_naive,data/berlin52.tsp,20,20,0,8181,0,NA,NA,NA
+cuda_ga_gpu_pop_global_dist,GA-GPU-POP-GlobalDist,data/berlin52.tsp,20,20,0,9125.4,120.514,279.731,0.255912,2000
+cuda_ga_gpu_pop_bankconflict,GPU-Pop Bank-Conflict Variant,data/berlin52.tsp,20,20,0,9125.4,120.514,330.908,1.60382,2000
+cuda_ga_b5_bigpop,GPU-Pop B5-bigpop,data/berlin52.tsp,20,20,0,7542,0,NA,NA,NA
+cuda_ga_b4_global,GPU-Pop B1+B2+B3-shuffle+B4-global,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_b3_shuffle,GPU-Pop B1+B2+B3-shuffle,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_gpu_pop_parallel_sort,GA-GPU-POP-ParallelSort,data/berlin52.tsp,20,20,0,9089.1,126.029,NA,NA,NA
+cuda_ga_b4_smem,GPU-Pop B1+B2+B3-shuffle+B4-smem,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_gpu_pop_aos,GA-GPU-POP-AoS,data/berlin52.tsp,20,20,0,9125.4,120.514,NA,NA,NA
+cuda_ga_b2_bitmask,GPU-Pop B1+B2,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_b1_stride,GPU-Pop B1-stride,data/berlin52.tsp,20,20,0,9234.55,195.84,NA,NA,NA
+cuda_ga_gpu_pop_verbose_comments,GA-GPU-POP-VerboseComments,data/berlin52.tsp,20,20,0,9125.4,120.514,NA,NA,NA
+cuda_ga,cuda_ga,data/berlin52.tsp,20,20,0,7795.45,208.35,NA,NA,NA
