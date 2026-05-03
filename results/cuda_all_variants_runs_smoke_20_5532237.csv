@@ -1,0 +1,1 @@
+variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,best_tour_path,status,notes

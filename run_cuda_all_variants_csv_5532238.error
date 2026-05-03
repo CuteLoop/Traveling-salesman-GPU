@@ -1,0 +1,5 @@
+src/cuda/CUDA-GA-no-greedy.cu(67): warning #177-D: function "nearest_neighbor_best_start" was declared but never referenced
+
+/bin/ld: final link failed: Stale file handle
+collect2: error: ld returned 1 exit status
+make[1]: *** [build/CUDA-GA-B2-bitmask] Error 1
