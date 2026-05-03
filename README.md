@@ -478,6 +478,8 @@ Each best tour CSV is normalized as:
 
 The main matrix script stays the primary workflow. By default it runs each implementation `5` times with the same seed (`SEED`, default `42`) and writes both the raw repeat-level summary and the aggregate summary automatically. Override with `RUNS=<n>` if needed.
 
+Each matrix job also runs `make all_cuda_versions` before benchmarking, so result artifacts stay aligned with the current checked-out source instead of reusing stale CUDA binaries.
+
 Each job writes result files with the Slurm job ID suffix, for example:
 
 - `results/sequential_<jobid>.txt`
@@ -569,7 +571,7 @@ Tip: add `--no-release-build` if you do not want the script to force `BUILD=rele
 
 ### 9.1 Latest Runtime + Tour Quality Results
 
-The latest pulled Slurm matrix runs are `5526437` for `smoke_20.tsp` and `5526438` for `berlin52.tsp`. Lower best-tour length is better.
+The latest Slurm matrix runs are `5528502` for `smoke_20.tsp` and `5528503` for `berlin52.tsp`. Each implementation was repeated `5` times; lower best-tour length is better.
 
 Local smoke20 baselines:
 
@@ -578,37 +580,37 @@ Local smoke20 baselines:
 | Python baseline (pyCombinatorial GA) | Local PC | 41.956912 | 75.776906 |
 | Sequential C (`ga-tsp`) | Local PC | 0.055615 | 77.492495 |
 
-Latest HPC matrix results (`smoke_20.tsp`, job `5526437`):
+Latest HPC matrix aggregate results (`smoke_20.tsp`, job `5528502`):
 
-| Implementation | Runtime (s) | Best tour length |
-|---|---:|---:|
-| GPU-Naive (`build/GPU-Naive`) | 0.18 | 80 |
-| CUDA-GA hybrid (`build/CUDA-GA`) | 0.35 | 75 |
-| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.17 | 73 |
-| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.17 | 73 |
-| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.16 | 73 |
-| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.17 | 73 |
-| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.17 | 73 |
-| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.13 | 73 |
-| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.12 | 73 |
-| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.12 | 73 |
-| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.12 | 73 |
+| Implementation | Mean runtime (s) | Runtime sd (s) | Mean best tour length | Best-length sd |
+|---|---:|---:|---:|---:|
+| GPU-Naive (`build/GPU-Naive`) | 0.106 | 0.0080 | 80.0 | 0.0 |
+| CUDA-GA hybrid (`build/CUDA-GA`) | 0.348 | 0.0040 | 75.0 | 0.0 |
+| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.164 | 0.0049 | 73.0 | 0.0 |
+| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.160 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.160 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.162 | 0.0040 | 73.0 | 0.0 |
+| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.160 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.120 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.120 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.120 | 0.0000 | 73.0 | 0.0 |
+| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.120 | 0.0000 | 73.0 | 0.0 |
 
-Latest HPC matrix results (`berlin52.tsp`, job `5526438`):
+Latest HPC matrix aggregate results (`berlin52.tsp`, job `5528503`):
 
-| Implementation | Runtime (s) | Best tour length |
-|---|---:|---:|
-| GPU-Naive (`build/GPU-Naive`) | 0.16 | 8181 |
-| CUDA-GA hybrid (`build/CUDA-GA`) | 0.51 | 7542 |
-| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.20 | 9412 |
-| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.20 | 9412 |
-| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.18 | 9412 |
-| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.19 | 9412 |
-| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.20 | 9412 |
-| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.15 | 9566 |
-| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.15 | 9566 |
-| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.15 | 9566 |
-| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.18 | 9566 |
+| Implementation | Mean runtime (s) | Runtime sd (s) | Mean best tour length | Best-length sd |
+|---|---:|---:|---:|---:|
+| GPU-Naive (`build/GPU-Naive`) | 0.102 | 0.0040 | 8181.0 | 0.0 |
+| CUDA-GA hybrid (`build/CUDA-GA`) | 0.510 | 0.0000 | 7542.0 | 0.0 |
+| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | 0.192 | 0.0040 | 9412.0 | 0.0 |
+| CUDA-GA GPU population bank-conflict (`build/CUDA-GA-GPU-Pop-bankconflict`) | 0.190 | 0.0000 | 9412.0 | 0.0 |
+| CUDA-GA GPU population bitset (`build/CUDA-GA-GPU-Pop-bitset`) | 0.178 | 0.0040 | 9412.0 | 0.0 |
+| CUDA-GA B1 stride (`build/CUDA-GA-B1-stride`) | 0.190 | 0.0000 | 9412.0 | 0.0 |
+| CUDA-GA B2 bitmask (`build/CUDA-GA-B2-bitmask`) | 0.188 | 0.0040 | 9412.0 | 0.0 |
+| CUDA-GA B3 reduce (`build/CUDA-GA-B3-reduce`) | 0.142 | 0.0040 | 9566.0 | 0.0 |
+| CUDA-GA B3 shuffle (`build/CUDA-GA-B3-shuffle`) | 0.142 | 0.0040 | 9566.0 | 0.0 |
+| CUDA-GA B4 global (`build/CUDA-GA-B4-global`) | 0.142 | 0.0040 | 9566.0 | 0.0 |
+| CUDA-GA B4 shared memory (`build/CUDA-GA-B4-smem`) | 0.180 | 0.0000 | 9566.0 | 0.0 |
 
 ### 9.2 Tour Sequences (rows) + final length
 

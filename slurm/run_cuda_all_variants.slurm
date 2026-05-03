@@ -44,10 +44,8 @@ RUNS="${RUNS:-5}"
 
 mkdir -p results
 
-if [ ! -x ./build/CUDA-GA-B4-smem ]; then
-  echo "Building all CUDA versions..."
-  make all_cuda_versions
-fi
+echo "Building all CUDA versions..."
+make all_cuda_versions
 
 DATASET_TAG="$(basename "$DATASET" .tsp)"
 SUMMARY_CSV="results/cuda_all_variants_summary_${DATASET_TAG}_${SLURM_JOB_ID}.csv"
