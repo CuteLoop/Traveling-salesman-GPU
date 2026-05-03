@@ -2,6 +2,8 @@
 
 #include <cuda_runtime.h>
 
+#include <chrono>
+
 #include <algorithm>
 #include <iostream>
 #include <limits>
@@ -193,15 +195,20 @@ int main(int argc, char* argv[]) {
         int block_size = 256;
         int grid_size = (num_tours + block_size - 1) / block_size;
 
+        const auto started_at = std::chrono::high_resolution_clock::now();
         eval_tour_lengths_kernel<<<grid_size, block_size>>>(d_tours,
-                                                            d_dist,
-                                                            d_lengths,
-                                                            num_tours,
-                                                            N);
+                                    d_dist,
+                                    d_lengths,
+                                    num_tours,
+                                    N);
         CUDA_CHECK(cudaGetLastError());
         CUDA_CHECK(cudaDeviceSynchronize());
+        const auto finished_at = std::chrono::high_resolution_clock::now();
+        const std::chrono::duration<double, std::milli> elapsed_ms = finished_at - started_at;
 
         CUDA_CHECK(cudaMemcpy(h_lengths.data(), d_lengths, lengths_bytes, cudaMemcpyDeviceToHost));
+
+        std::cout << "CUDA kernel elapsed ms: " << elapsed_ms.count() << "\n";
 
         std::cout << "\nGPU tour length evaluation:\n";
         for (int t = 0; t < num_tours; ++t) {

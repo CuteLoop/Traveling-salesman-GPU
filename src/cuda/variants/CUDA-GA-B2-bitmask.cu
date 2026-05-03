@@ -403,8 +403,16 @@ int main(int argc, char* argv[]) {
         std::cout << "DIMENSION: " << inst.dimension << "\n";
         std::cout << "Islands: " << cfg.islands << "\n";
         std::cout << "Generations: " << cfg.generations << "\n";
+        const auto started_at = std::chrono::high_resolution_clock::now();
         TourResult best = run_gpu_population_ga(inst, cfg);
+        const auto finished_at = std::chrono::high_resolution_clock::now();
+        const std::chrono::duration<double, std::milli> elapsed_ms = finished_at - started_at;
+
+        std::cout << "CUDA kernel elapsed ms: " << elapsed_ms.count() << "\n";
         std::cout << "\nBest tour length: " << best.length << "\n";
+        std::cout << "Best tour (0-based indices):\n";
+        for (int city : best.tour) std::cout << city << " ";
+        std::cout << best.tour.front() << "\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

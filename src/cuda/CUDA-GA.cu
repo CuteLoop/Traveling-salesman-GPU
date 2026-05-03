@@ -364,8 +364,12 @@ int main(int argc, char* argv[]) {
         std::cout << "Mutation rate: " << cfg.mutation_rate << "\n";
         std::cout << "Elite count: " << cfg.elite_count << "\n";
 
+        const auto started_at = std::chrono::high_resolution_clock::now();
         TourResult best = run_cuda_ga(inst, cfg);
+        const auto finished_at = std::chrono::high_resolution_clock::now();
+        const std::chrono::duration<double, std::milli> elapsed_ms = finished_at - started_at;
 
+        std::cout << "CUDA kernel elapsed ms: " << elapsed_ms.count() << "\n";
         std::cout << "\nBest GA tour length: " << best.length << "\n";
         std::cout << "Best tour (0-based indices):\n";
         for (int city : best.tour) {

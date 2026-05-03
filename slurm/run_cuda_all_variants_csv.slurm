@@ -62,7 +62,7 @@ AVG_CSV="results/cuda_all_variants_avg_${DATASET_TAG}_${JOB_TAG}.csv"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tsp_cuda_csv_${JOB_TAG}_XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,status,notes" > "$RUN_CSV"
+echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,best_tour_path,status,notes" > "$RUN_CSV"
 
 get_dimension() {
   awk -F: '
@@ -135,6 +135,20 @@ run_and_record() {
     target_reached="NA"
   fi
 
+  local best_tour_path=""
+  best_tour_path="$(awk '
+    found {
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", $0);
+      print $0;
+      exit
+    }
+    /^Best tour \(0-based indices\):$/ { found=1; next }
+    /^Tour \(0-based indices\):$/ { found=1; next }
+  ' "$stdout_file")"
+  if [ -z "$best_tour_path" ]; then
+    best_tour_path="NA"
+  fi
+
   local status="ok"
   local notes=""
   if [ "$rc" -ne 0 ]; then
@@ -142,7 +156,7 @@ run_and_record() {
     notes="$(tail -n 1 "$stdout_file" | tr ',' ';' | tr '\r\n' '  ')"
   fi
 
-  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${status},${notes}" >> "$RUN_CSV"
+  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${best_tour_path},${status},${notes}" >> "$RUN_CSV"
 }
 
 if [ ! -x ./build/CUDA-GA-B5-bigpop ]; then
@@ -204,14 +218,14 @@ for run_index in $(seq 1 "$RUNS"); do
     run_and_record "cuda_ga_b4_smem" "build/CUDA-GA-B4-smem" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
       ./build/CUDA-GA-B4-smem "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
   else
-    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$RUN_CSV"
+    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$RUN_CSV"
   fi
 done
 
 awk -F, '
 BEGIN {
   OFS=",";
-  print "variant,version,dataset,runs,ok_runs,target_hits,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed";
+  print "variant,version,dataset,runs,ok_runs,target_hits,best_reported_length,best_cuda_elapsed_ms,best_tour_path,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed";
 }
 NR == 1 { next }
 {
@@ -220,12 +234,18 @@ NR == 1 { next }
   dataset[variant] = $4;
   runs[variant]++;
 
-  if ($16 == "ok") {
+  if ($17 == "ok") {
     ok[variant]++;
     if ($15 == "yes") {
       hit_count[variant]++;
     }
     if ($12 != "NA") {
+      current_len = $12 + 0;
+      if (!(variant in best_len) || current_len < best_len[variant]) {
+        best_len[variant] = current_len;
+        best_time[variant] = $13;
+        best_tour[variant] = $16;
+      }
       len_sum[variant] += $12;
       len_sq_sum[variant] += ($12 * $12);
       len_count[variant]++;
@@ -263,7 +283,11 @@ END {
       time_stddev = "NA";
     }
 
-    print variant, version[variant], dataset[variant], runs[variant], ok[variant] + 0, hit_count[variant] + 0, mean_len, len_stddev, mean_time, time_stddev, mean_gen;
+    best_len_out = (variant in best_len) ? best_len[variant] : "NA";
+    best_time_out = (variant in best_time) ? best_time[variant] : "NA";
+    best_tour_out = (variant in best_tour) ? best_tour[variant] : "NA";
+
+    print variant, version[variant], dataset[variant], runs[variant], ok[variant] + 0, hit_count[variant] + 0, best_len_out, best_time_out, best_tour_out, mean_len, len_stddev, mean_time, time_stddev, mean_gen;
   }
 }
 ' "$RUN_CSV" > "$AVG_CSV"

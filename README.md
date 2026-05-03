@@ -1,4 +1,4 @@
-# Traveling Salesman Problem — GPU Approaches
+# Traveling Salesman Problem - GPU Approaches
 
 This repository tracks a staged TSP implementation arc:
 - Python baseline
@@ -6,7 +6,7 @@ This repository tracks a staged TSP implementation arc:
 - naive CUDA baseline
 - hybrid CUDA-GA and GPU-resident island-GA variants
 
-The current repository is less about a single executable and more about a set of experiment workflows. The core implementation docs live in `docs/`, and the experiment-specific runbooks live in `docs/EXPERIMENTS/`.
+The repo is organized around experiment workflows rather than a single executable. Core implementation notes live in `docs/`, and the experiment runbooks live in `docs/EXPERIMENTS/`.
 
 ## Table of Contents
 
@@ -14,8 +14,9 @@ The current repository is less about a single executable and more about a set of
 - [Repository Layout](#repository-layout)
 - [Quick Start](#quick-start)
 - [Build and Run](#build-and-run)
+- [HPC Workflow](#hpc-workflow)
 - [Headline Results](#headline-results)
-- [Experiment Workflows](#experiment-workflows)
+- [Optimization Story](#optimization-story)
 - [Documentation Map](#documentation-map)
 - [Current Caveats](#current-caveats)
 
@@ -30,7 +31,7 @@ Current status:
 | CUDA baseline | Done | `src/cuda/GPU-Naive.cu` |
 | CUDA GA variants | In progress | `src/cuda/CUDA-GA.cu`, `src/cuda/CUDA-GA-GPU-Pop.cu`, `src/cuda/variants/` |
 
-The baseline reference and the GPU optimization story are documented in:
+Primary references:
 
 - [docs/EXPERIMENTS/README.md](docs/EXPERIMENTS/README.md)
 - [docs/optimization-roadmap.md](docs/optimization-roadmap.md)
@@ -40,16 +41,16 @@ The baseline reference and the GPU optimization story are documented in:
 
 ```text
 .
-├── baselines/                  Python reference implementations and comparison scripts
-├── sequential/                 Sequential C GA implementation
-├── src/cuda/                   CUDA implementations
-├── src/cpp/                    Shared TSPLIB parser
-├── slurm/                      HPC batch scripts
-├── scripts/                    Local/HPC helper scripts
-├── docs/                       Implementation notes, experiments, and report material
-├── data/                       TSPLIB and Madeira datasets
-├── results/                    Committed result artifacts and maps
-└── README.md
+|-- baselines/                  Python reference implementations and comparison scripts
+|-- sequential/                 Sequential C GA implementation
+|-- src/cuda/                   CUDA implementations
+|-- src/cpp/                    Shared TSPLIB parser
+|-- slurm/                      HPC batch scripts
+|-- scripts/                    Local/HPC helper scripts
+|-- docs/                       Implementation notes, experiments, and report material
+|-- data/                       TSPLIB and Madeira datasets
+|-- results/                    Result artifacts and plots
+`-- README.md
 ```
 
 ## Quick Start
@@ -61,6 +62,7 @@ python -m venv venv
 
 # Windows
 venv\Scripts\activate
+
 # macOS / Linux
 source venv/bin/activate
 
@@ -73,7 +75,7 @@ pip install -r requirements.txt
 python -m pytest tests/ -v
 ```
 
-### Build everything currently covered by the root Makefile
+### Build everything from the root Makefile
 
 ```bash
 make all
@@ -97,7 +99,7 @@ python baselines/pycombinatorial_latlong_compare.py
 
 ### Sequential C GA
 
-Build from the `sequential/` directory:
+Build from `sequential/`:
 
 ```bash
 cd sequential
@@ -114,13 +116,19 @@ Example run:
 
 ### CUDA builds
 
-The root `Makefile` currently builds the main binaries with:
+Build all wired targets:
 
 ```bash
 make all
 ```
 
-This produces the currently wired targets in `build/`, including:
+Build only the CUDA matrix targets used by the Slurm runners:
+
+```bash
+make all_cuda_versions
+```
+
+Current root Makefile targets include:
 
 - `build/Sequential`
 - `build/GPU-Naive`
@@ -132,26 +140,61 @@ This produces the currently wired targets in `build/`, including:
 - `build/GA-GPU-POP-AoS`
 - `build/GA-GPU-POP-GlobalDist`
 - `build/GA-GPU-POP-VerboseComments`
+- `build/CUDA-GA-B1-stride`
+- `build/CUDA-GA-B2-bitmask`
+- `build/CUDA-GA-B3-reduce`
+- `build/CUDA-GA-B3-shuffle`
+- `build/CUDA-GA-B4-global`
+- `build/CUDA-GA-B4-smem`
+- `build/CUDA-GA-B5-bigpop`
 
-### HPC experiment runs
+Direct compile example for a single variant from repo root:
 
-The repository now has several experiment-oriented Slurm entrypoints instead of one single canonical workflow. The recommended references are the experiment notes:
+```bash
+nvcc -O3 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -lineinfo -Isrc/cpp \
+  -o /tmp/t src/cuda/variants/CUDA-GA-B1-stride.cu src/cpp/tsplib_parser.cpp
+```
+
+## HPC Workflow
+
+The most useful all-variants runner is:
+
+```bash
+sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=20,ISLANDS=256,GENERATIONS=2000,MUTATION=0.03,ELITE_POP=2,SEED_BASE=100 slurm/run_cuda_all_variants_csv.slurm
+```
+
+That script:
+- builds with `make all_cuda_versions` if needed
+- runs the current CUDA matrix, including B1 through B5
+- writes one per-run CSV and one averaged CSV
+
+Outputs for the example above are:
+
+- `results/cuda_all_variants_runs_berlin52_<jobid>.csv`
+- `results/cuda_all_variants_avg_berlin52_<jobid>.csv`
+
+One-shot runner, one execution per variant:
+
+```bash
+sbatch --export=ALL,DATASET=data/berlin52.tsp,ISLANDS=256,GENERATIONS=2000,MUTATION=0.03,ELITE_POP=2,SEED=100 slurm/run_cuda_all_variants.slurm
+```
+
+Other experiment runners:
+
+```bash
+sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10 slurm/run_cuda_all_variants_csv_randomseed.slurm
+sbatch --export=ALL,DATASET=data/berlin52.tsp,TARGET_LENGTH=7542,RUNS=10 slurm/run_cuda_modified_target_avg.slurm
+```
+
+Experiment references:
 
 - [docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md](docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md)
 - [docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md](docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md)
 - [docs/EXPERIMENTS/Experiment4_target_length_runtime.md](docs/EXPERIMENTS/Experiment4_target_length_runtime.md)
 
-Representative batch commands:
-
-```bash
-sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=10 slurm/run_cuda_all_variants_csv.slurm
-sbatch --export=ALL,DATASET=data/berlin52.tsp,RUNS=10 slurm/run_cuda_all_variants_csv_randomseed.slurm
-sbatch --export=ALL,DATASET=data/berlin52.tsp,TARGET_LENGTH=8500,RUNS=10 slurm/run_cuda_modified_target_avg.slurm
-```
-
 ## Headline Results
 
-This section is intentionally short. Detailed methodology and rerun commands are kept in [docs/EXPERIMENTS/README.md](docs/EXPERIMENTS/README.md).
+Detailed methodology lives in [docs/EXPERIMENTS/README.md](docs/EXPERIMENTS/README.md).
 
 ### smoke_20
 
@@ -166,7 +209,7 @@ Headline committed results:
 | CUDA-GA hybrid | `results/cuda_ga_5487209.txt` | 0.39 | 75 |
 | CUDA-GA GPU-pop | `results/cuda_ga_gpu_pop_5487210.txt` | 0.20 | 73 |
 
-Best committed smoke20 tour:
+Best committed smoke_20 tour:
 
 - implementation: `CUDA-GA-GPU-Pop`
 - length: `73`
@@ -175,54 +218,83 @@ Best committed smoke20 tour:
 0 -> 2 -> 1 -> 16 -> 17 -> 3 -> 7 -> 12 -> 11 -> 13 -> 14 -> 6 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18 -> 15 -> 0
 ```
 
-Supporting material:
-
-- [docs/EXPERIMENTS/Experiment1_python_vs_sequential_baseline.md](docs/EXPERIMENTS/Experiment1_python_vs_sequential_baseline.md)
-- [docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md](docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md)
-
 ### berlin52
 
-Headline committed berlin52 results across the current CUDA sweeps:
+Latest all-variants Berlin52 sweep checked in this repo:
 
-| Implementation | Source sweep | Typical runtime (s) | Best committed length |
-|---|---|---:|---:|
-| GPU-Naive | committed matrix sweeps | 0.10 | 8181 |
-| CUDA-GA hybrid | committed matrix sweeps | 0.50 to 0.51 | 7542 |
-| CUDA-GA-GPU-Pop control | committed matrix sweeps | 0.18 to 0.20 | 9097 |
-| CUDA-GA-GPU-Pop bitset | committed matrix sweeps | 0.17 to 0.18 | 9097 |
-| Parallel-sort / B3 / B4 family | committed matrix sweeps | 0.14 to 0.18 | 8883 |
+- dataset: `data/berlin52.tsp`
+- runner: `slurm/run_cuda_all_variants_csv.slurm`
+- settings: `RUNS=20, ISLANDS=256, GENERATIONS=2000, MUTATION=0.03, ELITE_POP=2, SEED_BASE=100`
+- artifacts:
+  - `results/cuda_all_variants_runs_berlin52_5532233.csv`
+  - `results/cuda_all_variants_avg_berlin52_5532233.csv`
+
+Summary from that sweep:
+
+Measured timing results from variants that currently export `CUDA kernel elapsed ms`:
+
+| Variant | Mean CUDA time (ms) | Stddev (ms) | Mean reported length |
+|---|---:|---:|---:|
+| `cuda_ga_gpu_pop_global_dist` | 279.731 | 0.256 | 9125.40 |
+| `cuda_ga_gpu_pop_bitset` | 284.177 | 0.341 | 9125.40 |
+| `cuda_ga_gpu_pop_bankconflict` | 330.908 | 1.604 | 9125.40 |
+| `cuda_ga_gpu_pop` | 334.398 | 4.323 | 9125.40 |
+
+Quality summary across the full sweep:
+
+| Variant family | Mean reported length | Timing status |
+|---|---:|---|
+| `cuda_ga_b5_bigpop` | 7542.00 | timing not yet exported |
+| `cuda_ga` | 7795.45 | timing not yet exported |
+| `gpu_naive` | 8181.00 | timing not yet exported in this CSV |
+| `cuda_ga_gpu_pop_parallel_sort` | 9089.10 | timing not yet exported |
+| GPU-pop control / bitset / bankconflict / AoS / GlobalDist / verbose | 9125.40 | partial timing coverage |
+| B1 / B2 / B3 / B4 family | 9234.55 | timing not yet exported |
 
 Interpretation:
 
-- `CUDA-GA` currently gives the best berlin52 tour quality in the committed artifacts.
-- The GPU-pop optimization family is faster, but currently worse on berlin52 quality.
-- The B3/B4 family appears to improve runtime substantially versus the GPU-pop control while still remaining well above the hybrid `7542` result.
+- Among the variants with timing instrumentation, `cuda_ga_gpu_pop_global_dist` is fastest, followed closely by `cuda_ga_gpu_pop_bitset`.
+- The speedups currently visible in the README are within the GPU-pop control family; they do not yet correspond to better Berlin52 tour quality.
+- `cuda_ga_b5_bigpop` is the only variant in this sweep that consistently reached the Berlin52 optimum `7542`.
+- The older GPU-pop optimization family improved runtime more than quality under these settings.
+- The B1-B4 family currently looks like a kernel-optimization story, not a solution-quality story.
 
-Best committed berlin52 tour:
+Timing caveat:
 
-- implementation: `CUDA-GA`
-- length: `7542`
+- This README should not be read as a complete runtime ranking across all variants yet. Several binaries still do not export `CUDA kernel elapsed ms`, so the timing table above is currently a measured subset, not the whole matrix.
 
-```text
-1 -> 29 -> 22 -> 19 -> 49 -> 28 -> 15 -> 45 -> 43 -> 33 -> 34 -> 35 -> 38 -> 39 -> 36 -> 37 -> 47 -> 23 -> 4 -> 14 -> 5 -> 3 -> 24 -> 11 -> 27 -> 26 -> 25 -> 46 -> 12 -> 13 -> 51 -> 10 -> 50 -> 32 -> 42 -> 9 -> 8 -> 7 -> 40 -> 18 -> 44 -> 31 -> 48 -> 0 -> 21 -> 30 -> 17 -> 2 -> 16 -> 20 -> 41 -> 6 -> 1
-```
+## Optimization Story
 
-Supporting material:
+The repo currently has one implemented optimization story family:
 
-- [docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md](docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md)
-- [docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md](docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md)
-- [docs/EXPERIMENTS/Experiment4_target_length_runtime.md](docs/EXPERIMENTS/Experiment4_target_length_runtime.md)
+- B1: stride padding in shared memory
+- B2: bitmask-based OX bookkeeping
+- B3-reduce / B3-shuffle: faster elite selection
+- B4-global / B4-smem: distance-memory layout experiments
+- B5-bigpop: large population layout plus greedy nearest-neighbor seeding
 
-## Experiment Workflows
+A useful way to think about the current result split is:
 
-The experiment notes are the best entrypoint for reproducing or extending the current benchmarking work.
+- B1-B4 mostly change how the same search is executed.
+- B5 changes how the search starts.
 
-| Experiment | Purpose | Main script | Notes |
-|---|---|---|---|
-| [Experiment 1](docs/EXPERIMENTS/Experiment1_python_vs_sequential_baseline.md) | Python vs sequential baseline | `baselines/compare_python_vs_sequential_ga.py` | local sanity and baseline quality/runtime |
-| [Experiment 2](docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md) | controlled-seed CUDA matrix sweep | `slurm/run_cuda_all_variants_csv.slurm` | broad implementation comparison |
-| [Experiment 3](docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md) | fresh-random-seed CUDA sweep | `slurm/run_cuda_all_variants_csv_randomseed.slurm` | variability across seeds |
-| [Experiment 4](docs/EXPERIMENTS/Experiment4_target_length_runtime.md) | time-to-target experiment | `slurm/run_cuda_modified_target_avg.slurm` | quality-threshold-oriented benchmarking |
+Current hypothesis for why B5 is much better on Berlin52:
+
+1. B5 computes nearest-neighbor tours on the GPU with `greedy_nn_kernel`, chooses the best start city, and seeds each island from that strong tour with only small perturbations.
+2. B1-B4 start each island from a fully random permutation, so they spend many generations climbing out of much worse initial tours.
+3. On Berlin52 with `2000` generations and `256` islands, initialization quality appears to dominate the kernel-level improvements.
+4. The identical or near-identical B1-B4 aggregate results suggest those variants are still exploring essentially the same search basin, just with different implementation details.
+
+So the current evidence does not say B1-B4 are useless. It says their optimizations are mostly throughput optimizations, while B5 introduced a search-quality optimization.
+
+Planned next framing for the optimization story:
+
+- B1-B5: kernel and memory optimization family
+- C1-C5: same progression, but with the C5 endpoint explicitly adding greedy nearest-neighbor population seeding
+
+That split would make the comparison cleaner:
+- B-family answers: how much do kernel optimizations help if search behavior stays roughly the same?
+- C-family answers: what changes when the search starts from a stronger population?
 
 ## Documentation Map
 
@@ -232,11 +304,13 @@ Implementation and architecture:
 - [docs/cuda-ga-gpu-pop-implementation.md](docs/cuda-ga-gpu-pop-implementation.md)
 - [docs/gpu-naive-cuda-implementation.md](docs/gpu-naive-cuda-implementation.md)
 
-Optimization planning and bottleneck notes:
+Optimization notes:
 
 - [docs/optimization-roadmap.md](docs/optimization-roadmap.md)
 - [docs/optimization-story.md](docs/optimization-story.md)
 - [docs/optimizations/EXPLAIN-B1.md](docs/optimizations/EXPLAIN-B1.md)
+- [docs/optimizations/EXPLAIN-B2.md](docs/optimizations/EXPLAIN-B2.md)
+- [docs/optimizations/EXPLAIN-B3.md](docs/optimizations/EXPLAIN-B3.md)
 - [docs/optimizations/EXPLAIN-B4.md](docs/optimizations/EXPLAIN-B4.md)
 
 Experiments and report:
@@ -246,729 +320,7 @@ Experiments and report:
 
 ## Current Caveats
 
-- The root `Makefile` and the Slurm scripts are not yet fully unified around one single build/run target set. Prefer the experiment notes over older ad hoc README instructions when in doubt.
-- Some older committed matrix CSVs have formatting issues in the timing columns and incomplete `reported_length` export for some B-variants.
+- Not all variants export the same timing fields yet, so quality comparisons are more complete than runtime comparisons in the latest Berlin52 matrix.
+- The B1-B4 family currently shares very similar quality outcomes on Berlin52; before claiming performance wins, verify that the intended search behavior actually differs.
 - The sequential C parser and the CUDA parser do not yet use identical TSPLIB distance semantics for every TSPLIB instance, so direct sequential-vs-CUDA comparisons on `berlin52.tsp` should be treated carefully.
-- For the most current reasoning about correctness, reproducibility, and fairness of comparisons, use [docs/report/correctness_and_benchmark_audit.md](docs/report/correctness_and_benchmark_audit.md).
-# Traveling Salesman Problem — GPU Approaches
-
-Experiments comparing CPU and GPU-accelerated heuristics for the Travelling Salesman Problem (TSP).  
-The project follows a structured progression: **Python baseline → sequential C → naive GPU → optimized GPU**, so that each stage can be validated against the one before it.
-
----
-
-## Roadmap
-
-| Stage | Status | Description |
-|-------|--------|-------------|
-| **1. Python baseline** | ✅ Done | pyCombinatorial (GA, ACO, Hilbert SFC) — correctness reference |
-| **2. Sequential C** | ✅ Done | Single-threaded C99 GA with tests, regression checks, and benchmarking |
-| **3. Naive GPU (CUDA)** | ✅ Done | CUDA baseline (`src/cuda/GPU-Naive.cu`) for parallel tour-length evaluation |
-| **4. GPU GA variants (CUDA)** | ✅ In Progress | Hybrid host+GPU GA (`src/cuda/CUDA-GA.cu`) and GPU island model (`src/cuda/CUDA-GA-GPU-Pop.cu`) |
-
-The Python baseline is the ground truth. Every subsequent implementation must produce tours within an acceptable tolerance of the Python results before moving forward.
-
----
-
-## Algorithm — Genetic Algorithm
-
-<table>
-  <tr>
-    <td align="center" width="50%">
-      <img src="img/flow-chart.png" alt="Sequential GA Flowchart" width="100%"/><br/>
-      <sub><b>Sequential GA</b></sub>
-    </td>
-    <td align="center" width="50%">
-      <img src="img/parallel-flow-chart.png" alt="Parallel GA Flowchart" width="100%"/><br/>
-      <sub><b>Parallel GA (GPU)</b></sub>
-    </td>
-  </tr>
-</table>
-
----
-
-## Project Structure
-
-```
-.
-├── baselines/                        # Python baseline (correctness reference)
-│   ├── ga_runner.py                  # Core helpers: load data, build matrix, run GA
-│   ├── py_combinatorial_ga_example_berlin52.py
-│   └── pycombinatorial_latlong_compare.py   # ACO / GA / Hilbert SFC on Madeira dataset
-├── sequential/                       # Sequential C99 GA implementation
-├── src/
-│   ├── cuda/                         # CUDA implementations
-│   │   ├── GPU-Naive.cu
-│   │   ├── CUDA-GA.cu
-│   │   ├── CUDA-GA-GPU-Pop.cu
-│   │   └── variants/                 # Optimization variants (B1/B2/B3/B4 + legacy)
-│   └── cpp/
-│       ├── tsplib_parser.cpp
-│       └── tsplib_parser.h
-├── slurm/                            # HPC job scripts
-├── scripts/                          # Build helpers for HPC/local
-├── tests/                            # Pytest test suite
-│   └── test_pycombinatorial_ga.py
-├── docs/                             # Technical notes and CUDA implementation docs
-│   └── optimizations/                # B1/B2/B3/B4 explainers
-├── results/                          # Output CSVs and HTML maps (git-ignored)
-├── img/
-│   └── flow-chart.png
-├── requirements.txt
-└── README.md
-```
-
----
-
-## 1. Set Up the Environment
-
-> Python 3.10+ recommended. CUDA toolkit required for GPU approaches.
-
-```bash
-# Clone the repo
-git clone https://github.com/<your-username>/Traveling-salesman-GPU.git
-cd Traveling-salesman-GPU
-
-# Create and activate a virtual environment
-python -m venv venv
-
-# Windows
-venv\Scripts\activate
-
-# macOS / Linux
-source venv/bin/activate
-```
-
----
-
-## 2. Install Requirements
-
-```bash
-pip install -r requirements.txt
-```
-
-> To regenerate `requirements.txt` after adding packages:
-> ```bash
-> pip freeze > requirements.txt
-> ```
-
----
-
-## 3. Run the Baseline Examples
-
-### 3a. Berlin52 — GA only
-
-Runs the GA on the classic Berlin52 dataset and saves a summary CSV.
-
-```bash
-python baselines/py_combinatorial_ga_example_berlin52.py
-```
-
-### 3b. Madeira — ACO vs Hilbert SFC vs GA (lat/long dataset)
-
-Runs all three algorithms on the Madeira island dataset and saves results + interactive HTML maps.
-
-```bash
-python baselines/pycombinatorial_latlong_compare.py
-```
-
----
-
-## 4. Input Data — Madeira Dataset
-
-The raw input is a tab-separated file of 25 cities on Madeira island, each with a name, latitude, and longitude.  
-A cleaned copy is saved at [`data/madeira_cities.csv`](data/madeira_cities.csv).
-
-| id | city | Lat | Long |
-|----|------|-----|------|
-| 1 | Seixal | 32.824309 | -17.111078 |
-| 2 | Sao_Vicente | 32.793790 | -17.046956 |
-| 3 | Boaventura | 32.817304 | -16.977539 |
-| 4 | Sao_Jorge | 32.825660 | -16.920450 |
-| 5 | Santana | 32.803557 | -16.896486 |
-| 6 | Faial | 32.782290 | -16.869005 |
-| 7 | Porto_da_Cruz | 32.764190 | -16.837015 |
-| 8 | Machico | 32.728766 | -16.808902 |
-| 9 | Canical | 32.740586 | -16.739115 |
-| 10 | Santa_Cruz | 32.702940 | -16.802803 |
-| 11 | Canico | 32.654046 | -16.852745 |
-| 12 | Sao_Goncalo | 32.655487 | -16.882707 |
-| 13 | Monte | 32.672723 | -16.915337 |
-| 14 | Santo_Antonio | 32.661563 | -16.944008 |
-| 15 | Camara_de_Lobos | 32.660118 | -17.006246 |
-| 16 | Campanario | 32.671240 | -17.042864 |
-| 17 | Ponta_do_Sol | 32.689528 | -17.098606 |
-| 18 | Madelane_do_Mar | 32.701437 | -17.134676 |
-| 19 | Prazeres | 32.751613 | -17.216841 |
-| 20 | Faja_da_Ovelha | 32.776683 | -17.233584 |
-| 21 | Achadas_da_Cruz | 32.841827 | -17.214240 |
-| 22 | Levada_Grande | 32.855182 | -17.182168 |
-| 23 | Serra_de_Agua | 32.727035 | -17.165940 |
-| 24 | Curral_das_Freiras | 32.726280 | -17.039234 |
-| 25 | Ribeiro_Frio | 32.733332 | -16.892088 |
-
-The distance matrix is computed using the **Haversine formula** (great-circle distance in km) and passed directly to each algorithm.
-
----
-
-## 5. Baseline Results — Madeira Dataset (25 cities, lat/long)
-
-> Results from a single run on CPU (Python 3.14, pyCombinatorial 2.1.8).  
-> These serve as the **correctness target** for future C and CUDA implementations.
-
-| Algorithm | Tour Distance (km) | Runtime (s) | Notes |
-|-----------|-------------------|-------------|-------|
-| **ACO** | 130.55 | 3.54 | 100 iterations, 15 ants, local search |
-| **Hilbert SFC** | 135.32 | 0.08 | Space-filling curve heuristic, local search |
-| **GA** | 130.55 | 38.07 | 300 generations, pop 30, local search |
-
-Interactive HTML tour maps: `results/map_aco.html`, `results/map_ga.html`
-
-### GA Best Tour
-
-![Madeira GA Tour](img/madeira_ga_tour.png)
-
-City numbers correspond to the `id` column in [`data/madeira_cities.csv`](data/madeira_cities.csv). The yellow dot marks the tour start city.
-
-Key observations:
-- ACO and GA converge to the same tour distance (130.55 km), confirming solution quality.
-- Hilbert SFC is ~450× faster but 3.6% longer — useful as a warm-start for other methods.
-- GA runtime (38 s on CPU for 26 cities) is the primary motivation for GPU acceleration.
-
----
-
-## 6. Run the Tests
-
-Run all tests (`pytest` is included in `requirements.txt`):
-
-```bash
-python -m pytest tests/ -v
-```
-
-Run a single test file:
-
-```bash
-python -m pytest tests/test_pycombinatorial_ga.py -v
-```
-
-### Test Coverage
-
-| Test | What it checks |
-|------|---------------|
-| `test_coordinates_loading` | Dataset fetches correctly; shape is `(n, 2)` |
-| `test_distance_matrix_properties` | Matrix is square, diagonal is 0, symmetric |
-| `test_ga_returns_valid_solution` | Route is a valid permutation; distance > 0 |
-| `test_ga_improves_over_random` | GA solution ≤ random tour length |
-
-> Tests use only 50 generations and population 10 to stay fast (< 30 s on CPU).
-
----
-
-## 7. Run the Sequential C Version
-
-The sequential implementation lives under `sequential/` and builds via `Makefile`.
-
-### 7.1 Build
-
-```bash
-cd sequential
-make clean
-make all
-```
-
-### 7.2 Run tests
-
-```bash
-make test
-```
-
-### 7.3 Run GA executable
-
-Linux/macOS:
-
-```bash
-./bin/ga-tsp --instance tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv results.csv
-```
-
-Windows PowerShell:
-
-```powershell
-.\bin\ga-tsp.exe --instance tests\fixtures\smoke_20.tsp --pop 100 --gen 200 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv results.csv
-```
-
-Optional executables:
-
-- `bin/skeleton` or `bin/skeleton.exe`
-- `bin/stress_crossover` or `bin/stress_crossover.exe`
-- `bin/stress_mutation` or `bin/stress_mutation.exe`
-
-## 8. Run the CUDA Versions
-
-Prerequisites:
-
-- NVIDIA GPU + driver
-- CUDA Toolkit with `nvcc` in PATH
-
-From repository root, compile each executable by linking its `.cu` file with `src/cpp/tsplib_parser.cpp` and include path `-Isrc/cpp`.
-
-### 8.1 Build CUDA executables
-
-Linux/macOS:
-
-```bash
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o GPU-Naive src/cuda/GPU-Naive.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA src/cuda/CUDA-GA.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bankconflict src/cuda/variants/CUDA-GA-GPU-Pop-bankconflict.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bitset src/cuda/variants/CUDA-GA-GPU-Pop-bitset.cu src/cpp/tsplib_parser.cpp
-```
-
-Windows PowerShell:
-
-```powershell
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o GPU-Naive.exe src/cuda/GPU-Naive.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA.exe src/cuda/CUDA-GA.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop.exe src/cuda/CUDA-GA-GPU-Pop.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bankconflict.exe src/cuda/variants/CUDA-GA-GPU-Pop-bankconflict.cu src/cpp/tsplib_parser.cpp
-nvcc -O2 -std=c++11 -Xcompiler -std=gnu++11 -arch=sm_60 -Isrc/cpp -o CUDA-GA-GPU-Pop-bitset.exe src/cuda/variants/CUDA-GA-GPU-Pop-bitset.cu src/cpp/tsplib_parser.cpp
-```
-
-If your GPU is not Pascal/P100, adjust `-arch=sm_60` to your compute capability.
-
-### 8.2 Run GPU-Naive
-
-Linux/macOS:
-
-```bash
-./GPU-Naive sequential/tests/fixtures/smoke_20.tsp
-```
-
-Windows PowerShell:
-
-```powershell
-.\GPU-Naive.exe sequential\tests\fixtures\smoke_20.tsp
-```
-
-### 8.3 Run CUDA-GA (hybrid)
-
-Usage:
-
-```text
-CUDA-GA <file.tsp> [population=512] [generations=1000] [mutation_rate=0.05] [elite_count=4] [seed=auto]
-```
-
-Example:
-
-```bash
-./CUDA-GA sequential/tests/fixtures/smoke_20.tsp 512 1000 0.05 4 42
-```
-
-### 8.4 Run CUDA-GA-GPU-Pop (island model)
-
-Usage:
-
-```text
-CUDA-GA-GPU-Pop <file.tsp> [islands=128] [generations=1000] [mutation_rate=0.05] [elite_count=2] [seed=auto]
-```
-
-Example:
-
-```bash
-./CUDA-GA-GPU-Pop sequential/tests/fixtures/smoke_20.tsp 128 1000 0.05 2 42
-```
-
-Note: this version currently enforces `MAX_CITIES=128`.
-
-## 8.5 HPC Toolchain Profile and Engineering Decisions
-
-The cluster workflow is tuned for an HPC stack where `cuda11/11.8` is available and some host compilers are older than modern desktop toolchains.
-
-### Module decision
-
-- `scripts/build.sh` and `slurm/run_tsp.slurm` now prefer `cuda11/11.8`.
-- If `cuda11/11.8` is not present on a node, scripts fall back to `cuda11/11.0`.
-
-Why: this keeps jobs portable across partitions and avoids hard failures due to site-specific module naming.
-
-### Language standard decision
-
-- Sequential C build uses `gcc` with `-std=c11`.
-- CUDA builds use `nvcc` with `-std=c++11 -Xcompiler -std=gnu++11`.
-- `scripts/build.sh` explicitly invokes `make` with `CC=gcc` when `gcc` is available.
-
-Why: this is compatible with older host GCC toolchains commonly found on shared HPC systems while still supporting current CUDA code (`chrono`, `nullptr`, modern STL usage).
-
-### Recommended HPC build/run flow
-
-From repository root:
-
-```bash
-chmod +x scripts/build.sh
-./scripts/build.sh
-```
-
-Submit benchmark job:
-
-```bash
-sbatch slurm/run_tsp.slurm
-```
-
-Build only CUDA GA-Pop variants:
-
-```bash
-make build/CUDA-GA-GPU-Pop-bankconflict
-make build/CUDA-GA-GPU-Pop-bitset
-```
-
-Build all CUDA versions (base + optimization variants):
-
-```bash
-make all_cuda_versions
-```
-
-### HPC workflow: submit, monitor, and collect results
-
-Use this end-to-end workflow on the cluster login node.
-
-1. Sync code and go to repo:
-
-```bash
-cd ~/Traveling-salesman-GPU
-git pull
-```
-
-2. Ensure the Slurm script points to your checkout path:
-
-```bash
-nano slurm/run_tsp.slurm
-```
-
-`slurm/run_tsp.slurm` auto-detects the repository root from script location (or from `SLURM_SUBMIT_DIR` when valid), so no manual `REPO_DIR` edit is required.
-
-3. Build once interactively (sanity check):
-
-```bash
-chmod +x scripts/build.sh
-./scripts/build.sh
-```
-
-4. Submit the job:
-
-```bash
-sbatch slurm/run_tsp.slurm
-```
-
-If outputs do not appear in your current `results/` folder, check that the job is running from your current checkout. The scripts now use `SLURM_SUBMIT_DIR` (the directory where you run `sbatch`) so outputs land in that same repo.
-
-### Submit one job per implementation
-
-From repository root:
-
-```bash
-sbatch slurm/run_sequential.slurm
-sbatch slurm/run_gpu_naive.slurm
-sbatch slurm/run_cuda_ga.slurm
-sbatch slurm/run_cuda_ga_gpu_pop.slurm
-sbatch slurm/run_cuda_ga_gpu_pop_bankconflict.slurm
-sbatch slurm/run_cuda_ga_gpu_pop_bitset.slurm
-```
-
-### Submit one matrix job for all CUDA versions
-
-From repository root:
-
-```bash
-# smoke_20 for all CUDA implementations
-make sbatch_cuda_smoke20
-
-# berlin52 for all CUDA implementations
-make sbatch_cuda_berlin52
-```
-
-Equivalent explicit Slurm commands:
-
-```bash
-sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp slurm/run_cuda_all_variants.slurm
-sbatch --export=ALL,DATASET=data/berlin52.tsp slurm/run_cuda_all_variants.slurm
-```
-
-The matrix script writes files like:
-
-- `results/cuda_ga_b3_shuffle_smoke_20_<jobid>.txt`
-- `results/cuda_ga_b4_global_berlin52_<jobid>.txt`
-
-Each job writes result files with the Slurm job ID suffix, for example:
-
-- `results/sequential_<jobid>.txt`
-- `results/sequential_stats_<jobid>.csv`
-- `results/gpu_naive_<jobid>.txt`
-- `results/cuda_ga_<jobid>.txt`
-- `results/cuda_ga_gpu_pop_<jobid>.txt`
-- `results/cuda_ga_gpu_pop_bankconflict_<jobid>.txt`
-- `results/cuda_ga_gpu_pop_bitset_<jobid>.txt`
-
-5. Monitor queue status:
-
-```bash
-squeue -u $USER
-```
-
-6. Follow job logs while running:
-
-```bash
-tail -f run_tsp.out
-tail -f run_tsp.error
-```
-
-7. After completion, check accounting summary:
-
-```bash
-sacct -j <jobid> --format=JobID,JobName,Partition,State,Elapsed,MaxRSS,AllocTRES
-```
-
-8. Review benchmark outputs:
-
-```bash
-ls -lh results
-```
-
-Expected files include:
-
-- `results/sequential.txt`
-- `results/gpu_naive.txt`
-- `results/cuda_ga.txt`
-- `results/cuda_ga_gpu_pop.txt`
-- `results/sequential_stats.csv`
-
-## 9. Compare Python Baseline vs Sequential C (Same Instance)
-
-### 9.0 Recommended Run Profiles
-
-Use these two profiles depending on what you want to measure:
-
-1. Normal run (similar parameters, fast): same high-level GA knobs for Python and C (`pop=100`, `gen=200`, `mutation=0.1`, `elite=2`).
-2. Budgeted C run (~1/10 Python time): keep C settings fixed except increase generations to consume about one-tenth of Python runtime.
-
-Normal fast comparison command:
-
-```bash
-python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
-```
-
-Budgeted C-only run command (targeting ~1/10 of Python runtime observed on this machine):
-
-```powershell
-.\sequential\bin\ga-tsp.exe --instance .\sequential\tests\fixtures\smoke_20.tsp --pop 100 --gen 150000 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv .\sequential\results_budget_1tenth.csv
-```
-
-Why this split is useful:
-
-- Normal run gives quick apples-to-apples comparison for iteration/testing.
-- Budgeted run gives C more search time while still bounded by a reproducible time budget.
-
-Use this script to run both implementations on the same TSPLIB coordinate file, measure runtime, and compare route/distance:
-
-`baselines/compare_python_vs_sequential_ga.py`
-
-From repository root:
-
-```bash
-python baselines/compare_python_vs_sequential_ga.py --tsp sequential/tests/fixtures/smoke_20.tsp --pop 100 --gen 200 --mutation 0.1 --elite 2 --seed 42
-```
-
-What it does:
-
-- Runs pyCombinatorial GA on the parsed TSPLIB coordinates.
-- Builds and runs `sequential/bin/ga-tsp` (or `.exe` on Windows) with matching parameters.
-- Captures elapsed time for both.
-- Compares tours in a cycle-invariant way (rotation/reversal equivalent).
-- Saves full details to `results/python_vs_sequential_compare.txt`.
-
-Tip: add `--no-release-build` if you do not want the script to force `BUILD=release` for the sequential binary.
-
-### 9.1 Local + HPC Batch Results (`smoke_20.tsp`)
-
-This table combines local-PC measurements and HPC batch-job measurements.
-
-| Implementation | Environment | Runtime (s) | Best tour length |
-|---|---|---:|---:|
-| Python baseline (pyCombinatorial GA) | Local PC | 41.956912 | 75.776906 |
-| Sequential C (`ga-tsp`) | Local PC | 0.055615 | 77.492495 |
-| Sequential (`build/Sequential`) | HPC batch (`sequential_5487207.txt`) | 0.01 | 77.492495 |
-| GPU-Naive (`build/GPU-Naive`) | HPC batch (`gpu_naive_5487208.txt`) | 0.13 | 80 |
-| CUDA-GA hybrid (`build/CUDA-GA`) | HPC batch (`cuda_ga_5487209.txt`) | 0.39 | 75 |
-| CUDA-GA GPU population (`build/CUDA-GA-GPU-Pop`) | HPC batch (`cuda_ga_gpu_pop_5487210.txt`) | 0.20 | 73 |
-
-### 9.2 Tour Sequences (rows) + final length
-
-| Implementation | Tour sequence (0-based cycle) | Length |
-|---|---|---:|
-| Python baseline (local) | 12 -> 11 -> 0 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 15 -> 18 -> 9 -> 8 -> 10 -> 4 -> 19 -> 5 -> 6 -> 14 -> 13 -> 12 | 75.776906 |
-| Sequential C (local) | 9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9 | 77.492495 |
-| Sequential (HPC) | 9 -> 6 -> 5 -> 19 -> 8 -> 10 -> 4 -> 14 -> 13 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 0 -> 15 -> 12 -> 11 -> 18 -> 9 | 77.492495 |
-| GPU-Naive (HPC) | 8 -> 9 -> 18 -> 6 -> 5 -> 19 -> 4 -> 14 -> 13 -> 11 -> 12 -> 15 -> 0 -> 7 -> 3 -> 17 -> 16 -> 1 -> 2 -> 10 -> 8 | 80 |
-| CUDA-GA hybrid (HPC) | 14 -> 13 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18 -> 6 -> 11 -> 12 -> 15 -> 0 -> 3 -> 17 -> 16 -> 1 -> 2 -> 7 -> 14 | 75 |
-| CUDA-GA GPU population (HPC) | 0 -> 2 -> 1 -> 16 -> 17 -> 3 -> 7 -> 12 -> 11 -> 13 -> 14 -> 6 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18 -> 15 -> 0 | 73 |
-
-### 9.3 Tour Images (`smoke_20.tsp`)
-
-Python baseline (local):
-
-![Python local tour](img/smoke20_python_local.png)
-
-Sequential C (local):
-
-![Sequential local tour](img/smoke20_seq_local.png)
-
-Sequential (HPC):
-
-![Sequential HPC tour](img/smoke20_seq_hpc.png)
-
-GPU-Naive (HPC):
-
-![GPU-Naive HPC tour](img/smoke20_gpu_naive_hpc.png)
-
-CUDA-GA hybrid (HPC):
-
-![CUDA-GA HPC tour](img/smoke20_cuda_ga_hpc.png)
-
-CUDA-GA GPU population (HPC):
-
-![CUDA-GA-GPU-Pop HPC tour](img/smoke20_cuda_ga_gpu_pop_hpc.png)
-
-To regenerate these figures from the current result files:
-
-```bash
-python baselines/render_smoke20_tour_gallery.py
-```
-
-Sources:
-
-- Local comparison script outputs: `results/python_vs_sequential_compare.csv`, `results/python_vs_sequential_compare.txt`
-- HPC batch outputs: `results/sequential_5487207.txt`, `results/gpu_naive_5487208.txt`, `results/cuda_ga_5487209.txt`, `results/cuda_ga_gpu_pop_5487210.txt`
-
-Note: runtimes are not directly comparable across local PC and HPC environments because hardware, compiler, and runtime conditions differ.
-
-### 9.4 Longer Sequential Budgeted Run (~1/10 Python runtime)
-
-Sequential command used:
-
-```powershell
-.\sequential\bin\ga-tsp.exe --instance .\sequential\tests\fixtures\smoke_20.tsp --pop 100 --gen 150000 --seed 42 --elites 2 --tk 3 --pc 0.9 --pm 0.1 --csv .\sequential\results_budget_1tenth.csv
-```
-
-Measured runtime: `4.0735 s` (target budget was `~4.1957 s`).
-
-Result summary:
-
-- Best distance: `77.073275`
-- Tour length: `20`
-- Tour order:
-
-```text
-10 -> 4 -> 14 -> 13 -> 12 -> 11 -> 0 -> 7 -> 17 -> 3 -> 16 -> 1 -> 2 -> 15 -> 18 -> 9 -> 6 -> 5 -> 19 -> 8 -> 10
-```
-
-Output CSV:
-
-- `sequential/results_budget_1tenth.csv`
-
-## 10. Optimization To-Do and Report Files
-
-The active optimization plan and final-report drafting work are tracked in two living documents:
-
-- [docs/optimization-roadmap.md](docs/optimization-roadmap.md)
-- [docs/report/report.md](docs/report/report.md)
-
-### 10.1 Optimization To-Do
-
-Current optimization work is organized into four stages.
-
-Stage 1: high-ROI fixes
-- Eliminate shared-memory bank conflicts with stride padding (`stride = n + 1`).
-- Remove local-memory spills in OX crossover by replacing `used[MAX_CITIES]` with a 128-bit bitmask.
-- Replace the thread-0 serialized elite sort with a warp-shuffle top-k reduction.
-- Benchmark constant-memory distance lookup against global `__restrict__` distance lookup.
-
-Stage 2: structural improvements
-- Add parallel 2-opt refinement for elite tours inside the island kernel.
-- Prototype warp-level parallel tour evaluation (`1 warp = 1 individual`).
-
-Stage 3: architectural experiments
-- Implement a warp-per-individual kernel variant.
-- Implement a packed 2-islands-per-block kernel variant.
-
-Stage 4: scaling experiments
-- Add island migration.
-- Remove the `MAX_CITIES = 128` limitation and support larger instances.
-
-### 10.2 Profiling and Benchmark To-Do
-
-- Collect TSPLIB benchmark instances: `berlin52.tsp`, `kroA100.tsp`, `ch130.tsp`, `d198.tsp`.
-- Run the CUDA tool audit on HPC and record available tools (`nvprof`, `ncu`, `nsys`, `compute-sanitizer`).
-- Add `cudaEvent_t` timing wrappers to all CUDA binaries before optimization experiments.
-- Run E1: implementation comparison (CPU-only, hybrid CUDA-GA, GPU-resident island GA).
-- Run E5: optimization version story (V0 through V5).
-- Run E6: 2-opt interval sweep.
-
-### 10.3 Report Working Files
-
-The report work is split across:
-
-- [docs/report/report.md](docs/report/report.md): living final report with section status tracker, writing checklist, experiment tables, and references.
-- [docs/optimization-roadmap.md](docs/optimization-roadmap.md): implementation playbook tying bottlenecks to code locations, mathematical claims, profiling commands, and staged fixes.
-
-### 10.4 Experiment Notes
-
-Experiment-specific notes now live under [docs/EXPERIMENTS/README.md](docs/EXPERIMENTS/README.md).
-
-Current experiment writeups:
-
-- [docs/EXPERIMENTS/Experiment1_python_vs_sequential_baseline.md](docs/EXPERIMENTS/Experiment1_python_vs_sequential_baseline.md)
-- [docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md](docs/EXPERIMENTS/Experiment2_cuda_matrix_seed_schedule.md)
-- [docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md](docs/EXPERIMENTS/Experiment3_cuda_matrix_random_seed.md)
-- [docs/EXPERIMENTS/Experiment4_target_length_runtime.md](docs/EXPERIMENTS/Experiment4_target_length_runtime.md)
-
-Each note records:
-
-- motivation,
-- current committed findings,
-- whether the experiment has already been run,
-- and the exact command to rerun it.
-
-Current report status summary:
-
-- Write-now sections: Introduction, Background, Implementation Arc, Profiling Protocol, 2-opt design, References.
-- Needs-data sections: Abstract, Optimization Story, Discussion, Conclusion.
-- Experiment-pending section: Experimental Results.
-
-### 10.5 Immediate Next Actions
-
-1. Add kernel timing instrumentation to `CUDA-GA.cu` and `CUDA-GA-GPU-Pop.cu`.
-2. Collect profiler baselines for the current GPU-population kernel.
-3. Implement Stage 1 fixes in `CUDA-GA-GPU-Pop.cu` one at a time and benchmark each version.
-4. Fill the corresponding experiment tables in [docs/report/report.md](docs/report/report.md) after each HPC run.
-
----
-
-## 11. Reference — NVIDIA cuOpt
-
-> [NVIDIA cuOpt](https://build.nvidia.com/nvidia/nvidia-cuopt) is NVIDIA's production-grade, GPU-accelerated decision optimization engine. It is the state-of-the-art reference for what fully optimized GPU-based TSP/VRP solving looks like.
-
-| Property | Detail |
-|----------|--------|
-| **Solves** | TSP, VRP, PDP, LP, MILP, QP |
-| **Core** | C++ engine with Python, C, and REST server APIs |
-| **Approach** | Generates an initial population, then iteratively improves using GPU-accelerated heuristics (local search, feasibility pump, etc.) until a time limit is reached |
-| **Scale** | Millions of variables and constraints |
-| **Deployment** | pip, conda, Docker (`nvidia/cuopt`), NGC container, API Catalog microservice |
-| **License** | Open source (GitHub) + NVIDIA AI Enterprise for production support |
-
-**Why it matters for this project:**  
-cuOpt represents the ceiling of GPU-accelerated TSP performance. It would be interesting at the end to compare our algorithm with CuOPT.
-**Links:**
-- [Interactive demo (API Catalog)](https://build.nvidia.com/nvidia/nvidia-cuopt)
-- [Product page](https://www.nvidia.com/en-us/ai-data-science/products/cuopt/)
-- [Documentation](https://docs.nvidia.com/cuopt/user-guide/introduction.html)
-- [GitHub (open source)](https://github.com/NVIDIA/cuopt)
-- [Google Colab examples](https://colab.research.google.com/github/NVIDIA/cuopt-examples/blob/cuopt_examples_launcher/cuopt_examples_launcher.ipynb)
+- The root Makefile and the Slurm scripts are much closer now, but the experiment notes remain the most reliable source of truth for reruns.
