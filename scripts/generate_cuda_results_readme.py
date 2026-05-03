@@ -104,6 +104,12 @@ def build_variant_order(rows: list[dict[str, str]]) -> list[str]:
     return list(ordered)
 
 
+def display_variant_name(variant: str) -> str:
+    if variant == "gpu_naive":
+        return "gpu_naive (eval only)"
+    return variant
+
+
 def build_table_rows(runs_path: Path, avg_path: Path) -> list[str]:
     run_rows = [row for row in read_csv_rows(runs_path) if row.get("status") == "ok"]
     avg_rows = read_csv_rows(avg_path)
@@ -152,7 +158,7 @@ def build_table_rows(runs_path: Path, avg_path: Path) -> list[str]:
 
         table_lines.append(
             "| `{variant}` | {best_length} | {avg_length} | {std_length} | {best_time} | {avg_time} | {std_time} |".format(
-                variant=variant,
+                variant=display_variant_name(variant),
                 best_length=format_number(best_length),
                 avg_length=format_number(avg_length),
                 std_length=format_number(std_length),
@@ -201,6 +207,7 @@ def generate_headline_results() -> str:
                     "Notes:",
                     "",
                     "- Many variants tie at the smoke_20 optimum length `73`, so the timing columns are what separate them under this configuration.",
+                    "- `gpu_naive` is labeled `eval only` because its CUDA timing measures a tiny verification kernel, not a GA optimization run.",
                     "- On smoke_20, `cuda_ga_gpu_pop_bitset` is the fastest timed variant among the implementations that also hit the best observed length.",
                     "",
                 ]
@@ -222,6 +229,7 @@ def generate_headline_results() -> str:
             "Timing caveat:",
             "",
             "- `NA` timing cells in these tables come from historical completed result files that were generated before those binaries were rerun with the now-standard timing export.",
+            "- `gpu_naive (eval only)` remains in the table as a correctness reference, but its timing is not comparable to the GA variant timings.",
             "- The newest `cuda_ga_no_greedy` and `cuda_ga_c1` through `cuda_ga_c5` variants will appear automatically once a completed standardized sweep writes non-empty run and average CSVs for them.",
             "",
         ]

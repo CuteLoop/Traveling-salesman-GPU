@@ -39,13 +39,13 @@ fi
 cd "$REPO_DIR"
 
 DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
-RUNS="${RUNS:-10}"
-ISLANDS="${ISLANDS:-128}"
-GENERATIONS="${GENERATIONS:-1000}"
-MUTATION="${MUTATION:-0.05}"
+RUNS="${RUNS:-20}"
+ISLANDS="${ISLANDS:-256}"
+GENERATIONS="${GENERATIONS:-2000}"
+MUTATION="${MUTATION:-0.03}"
 ELITE_POP="${ELITE_POP:-2}"
 ELITE_HYBRID="${ELITE_HYBRID:-4}"
-SEED_BASE="${SEED_BASE:-42}"
+SEED_BASE="${SEED_BASE:-100}"
 POP_HYBRID="${POP_HYBRID:-512}"
 
 if [ ! -f "$DATASET" ]; then
@@ -101,6 +101,49 @@ build_cuda_variants() {
   return 1
 }
 
+verify_required_binaries() {
+  local required=(
+    build/GPU-Naive
+    build/CUDA-GA
+    build/CUDA-GA-no-greedy
+    build/CUDA-GA-GPU-Pop
+    build/CUDA-GA-GPU-Pop-bankconflict
+    build/CUDA-GA-GPU-Pop-bitset
+    build/GA-GPU-POP-ParallelSort
+    build/GA-GPU-POP-AoS
+    build/GA-GPU-POP-GlobalDist
+    build/GA-GPU-POP-VerboseComments
+    build/CUDA-GA-B1-stride
+    build/CUDA-GA-B2-bitmask
+    build/CUDA-GA-B3-reduce
+    build/CUDA-GA-B3-shuffle
+    build/CUDA-GA-B4-global
+    build/CUDA-GA-B5-bigpop
+    build/CUDA-GA-C1-stride
+    build/CUDA-GA-C2-bitmask
+    build/CUDA-GA-C3-reduce
+    build/CUDA-GA-C4-global
+    build/CUDA-GA-C5-bigpop
+  )
+
+  if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
+    required+=(build/CUDA-GA-B4-smem)
+  fi
+
+  local missing=0
+  local binary
+  for binary in "${required[@]}"; do
+    if [ ! -x "$binary" ]; then
+      echo "Error: missing binary '$binary' after build."
+      missing=1
+    fi
+  done
+
+  if [ "$missing" -ne 0 ]; then
+    return 1
+  fi
+}
+
 run_and_record() {
   local variant="$1"
   local binary="$2"
@@ -123,6 +166,7 @@ run_and_record() {
   if [ -z "$version" ]; then
     version="$variant"
   fi
+  version="$(printf '%s' "$version" | tr ',' ';')"
 
   local length=""
   length="$(awk -F': ' '
@@ -152,7 +196,7 @@ run_and_record() {
   local generations_completed=""
   generations_completed="$(awk -F': ' '/^Generations completed:/ {print $2; exit}' "$stdout_file")"
   if [ -z "$generations_completed" ]; then
-    generations_completed="NA"
+    generations_completed="$generations"
   fi
 
   local target_reached=""
@@ -197,6 +241,7 @@ run_and_record() {
 # stdout-grep extractor produced NA in the resulting CSV.
 echo "Ensuring CUDA variants are up to date..."
 build_cuda_variants
+verify_required_binaries
 
 for run_index in $(seq 1 "$RUNS"); do
   seed=$((SEED_BASE + run_index - 1))

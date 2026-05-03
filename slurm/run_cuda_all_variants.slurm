@@ -34,12 +34,12 @@ if [ ! -f "$DATASET" ]; then
   exit 1
 fi
 
-ISLANDS="${ISLANDS:-128}"
-GENERATIONS="${GENERATIONS:-1000}"
-MUTATION="${MUTATION:-0.05}"
+ISLANDS="${ISLANDS:-256}"
+GENERATIONS="${GENERATIONS:-2000}"
+MUTATION="${MUTATION:-0.03}"
 ELITE_POP="${ELITE_POP:-2}"
 ELITE_HYBRID="${ELITE_HYBRID:-4}"
-SEED="${SEED:-42}"
+SEED="${SEED:-100}"
 
 mkdir -p results
 
@@ -58,13 +58,64 @@ if [ -z "$DATASET_DIM" ]; then
   DATASET_DIM="unknown"
 fi
 
-# Always rebuild via make. The previous guard
-# (`if [ ! -x ./build/CUDA-GA-B5-bigpop ]`) caused stale binaries to silently
-# survive source edits when only some variants had been touched, producing NA
-# rows in downstream CSVs. Make's own dependency tracking is cheap when
-# nothing is out of date.
+build_cuda_variants() {
+  local attempt=1
+  local max_attempts=2
+
+  while [ "$attempt" -le "$max_attempts" ]; do
+    echo "Building CUDA variants with make all_cuda_versions (attempt ${attempt}/${max_attempts})..."
+    if make all_cuda_versions; then
+      return 0
+    fi
+
+    if [ "$attempt" -lt "$max_attempts" ]; then
+      echo "Build failed; cleaning build directory before retry."
+      rm -rf build
+      mkdir -p build
+    fi
+    attempt=$((attempt + 1))
+  done
+
+  echo "Error: failed to build CUDA variants after ${max_attempts} attempts."
+  return 1
+}
+
+verify_required_binaries() {
+  local required=(
+    build/GPU-Naive
+    build/CUDA-GA
+    build/CUDA-GA-GPU-Pop
+    build/CUDA-GA-GPU-Pop-bankconflict
+    build/CUDA-GA-GPU-Pop-bitset
+    build/CUDA-GA-B1-stride
+    build/CUDA-GA-B2-bitmask
+    build/CUDA-GA-B3-reduce
+    build/CUDA-GA-B3-shuffle
+    build/CUDA-GA-B4-global
+    build/CUDA-GA-B5-bigpop
+  )
+
+  if [ "$DATASET_DIM" != "unknown" ] && [ "$DATASET_DIM" -le 99 ]; then
+    required+=(build/CUDA-GA-B4-smem)
+  fi
+
+  local missing=0
+  local binary
+  for binary in "${required[@]}"; do
+    if [ ! -x "$binary" ]; then
+      echo "Error: missing binary '$binary' after build."
+      missing=1
+    fi
+  done
+
+  if [ "$missing" -ne 0 ]; then
+    return 1
+  fi
+}
+
 echo "Ensuring CUDA variants are up to date..."
-make all_cuda_versions
+build_cuda_variants
+verify_required_binaries
 
 DATASET_TAG="$(basename "$DATASET" .tsp)"
 

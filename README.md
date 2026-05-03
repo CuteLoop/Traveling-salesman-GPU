@@ -273,35 +273,41 @@ Latest completed standardized CUDA sweep:
 - runner: `slurm/run_cuda_all_variants_csv.slurm`
 - settings: `RUNS=20, ISLANDS=256, GENERATIONS=2000, MUTATION=0.03, ELITE_POP=2, ELITE_HYBRID=4, POP_HYBRID=512, SEED_BASE=100`
 - latest completed artifacts used here:
-  - `results/cuda_all_variants_runs_smoke_20_5532235.csv`
-  - `results/cuda_all_variants_avg_smoke_20_5532235.csv`
+  - `results/cuda_all_variants_runs_smoke_20_5532258.csv`
+  - `results/cuda_all_variants_avg_smoke_20_5532258.csv`
 
 Per-implementation results from that sweep:
 
 | Variant | Best length | Avg length | Length stddev | Best time (ms) | Avg time (ms) | Time stddev (ms) |
 |---|---:|---:|---:|---:|---:|---:|
-| `gpu_naive` | 80 | 80 | 0 | 0.131155 | 0.135038 | 0.006551 |
-| `cuda_ga` | 75 | 75 | 0 | 207.458 | 208.87 | 2.15816 |
-| `cuda_ga_gpu_pop` | 73 | 73 | 0 | 29.4514 | 30.4586 | 1.72076 |
-| `cuda_ga_gpu_pop_bankconflict` | 73 | 73 | 0 | 29.2197 | 30.2686 | 1.75376 |
-| `cuda_ga_gpu_pop_bitset` | 73 | 73 | 0 | 27.4659 | 28.4726 | 1.65234 |
-| `cuda_ga_gpu_pop_parallel_sort` | 73 | 73 | 0 | 94.5684 | 95.2308 | 0.832296 |
-| `cuda_ga_gpu_pop_aos` | 73 | 73 | 0 | 166.686 | 169.545 | 4.45991 |
-| `cuda_ga_gpu_pop_global_dist` | 73 | 73 | 0 | 34.6396 | 34.6408 | 0.001097 |
-| `cuda_ga_gpu_pop_verbose_comments` | 73 | 73 | 0 | 114.175 | 114.732 | 0.539419 |
-| `cuda_ga_b1_stride` | 73 | 73 | 0 | 94.3831 | 95.2463 | 0.829161 |
-| `cuda_ga_b2_bitmask` | 73 | 73 | 0 | 93.1425 | 93.773 | 0.547147 |
-| `cuda_ga_b3_reduce` | 73 | 73 | 0 | 92.845 | 93.3016 | 0.412932 |
-| `cuda_ga_b3_shuffle` | 73 | 73 | 0 | 93.4792 | 93.6598 | 0.188824 |
-| `cuda_ga_b4_global` | 73 | 73 | 0 | 92.7258 | 93.1482 | 0.401541 |
-| `cuda_ga_b5_bigpop` | 73 | 73 | 0 | 246.325 | 246.701 | 0.332447 |
-| `cuda_ga_b4_smem` | 73 | 73 | 0 | 93.1285 | 93.6578 | 0.510209 |
+| `gpu_naive (eval only)` | 80 | 80 | 0 | 0.123908 | 0.13027 | 0.005707 |
+| `cuda_ga` | 74 | 74.65 | 0.48936 | 559.206 | 561.685 | 2.18129 |
+| `cuda_ga_no_greedy` | 73 | 73.7 | 1.17429 | 559.359 | 564.083 | 6.09395 |
+| `cuda_ga_gpu_pop` | 73 | 73 | 0 | 121.253 | 122.043 | 2.8705 |
+| `cuda_ga_gpu_pop_bankconflict` | 73 | 73 | 0 | 120.223 | 120.467 | 0.315725 |
+| `cuda_ga_gpu_pop_bitset` | 73 | 73 | 0 | 114.945 | 115.121 | 0.091226 |
+| `cuda_ga_gpu_pop_parallel_sort` | 73 | 73 | 0 | 124.759 | 125.496 | 0.468964 |
+| `cuda_ga_gpu_pop_aos` | 73 | 73 | 0 | 625.337 | 626.005 | 0.382793 |
+| `cuda_ga_gpu_pop_global_dist` | 73 | 73 | 0 | 148.799 | 149.132 | 0.215895 |
+| `cuda_ga_gpu_pop_verbose_comments` | 73 | 73 | 0 | 203.256 | 204.368 | 0.72499 |
+| `cuda_ga_b1_stride` | 73 | 73 | 0 | 124.328 | 125.272 | 0.658154 |
+| `cuda_ga_b2_bitmask` | 73 | 73 | 0 | 116.473 | 117.41 | 0.581083 |
+| `cuda_ga_b3_reduce` | 73 | 73 | 0 | 115.818 | 117.327 | 0.642565 |
+| `cuda_ga_b3_shuffle` | 73 | 73 | 0 | 116.367 | 117.497 | 0.673584 |
+| `cuda_ga_b4_global` | 73 | 73 | 0 | 116.516 | 117.231 | 0.520973 |
+| `cuda_ga_b5_bigpop` | 73 | 73 | 0 | 1681.68 | 1683.5 | 1.52303 |
+| `cuda_ga_c1_stride` | 73 | 73 | 0 | 125.343 | 126.115 | 0.737526 |
+| `cuda_ga_c2_bitmask` | 73 | 73 | 0 | 116.27 | 117.256 | 0.503559 |
+| `cuda_ga_c3_reduce` | 73 | 73 | 0 | 116.239 | 117.369 | 0.587855 |
+| `cuda_ga_c4_global` | 73 | 73 | 0 | 117.019 | 117.825 | 0.604088 |
+| `cuda_ga_c5_bigpop` | 73 | 73 | 0 | 1679.8 | 1683.7 | 1.4726 |
+| `cuda_ga_b4_smem` | 73 | 73 | 0 | 115.99 | 117.644 | 1.43144 |
 
 Notes:
 
 - Many variants tie at the smoke_20 optimum length `73`, so the timing columns are what separate them under this configuration.
+- `gpu_naive` is labeled `eval only` because its CUDA timing measures a tiny verification kernel, not a GA optimization run.
 - On smoke_20, `cuda_ga_gpu_pop_bitset` is the fastest timed variant among the implementations that also hit the best observed length.
-- For the optimization story, smoke_20 should be treated as a correctness and regression check, not as the main performance-comparison dataset; the small problem size does not reflect the bottlenecks the B/C family is targeting.
 
 ### berlin52
 
@@ -318,7 +324,7 @@ Per-implementation results from that sweep:
 
 | Variant | Best length | Avg length | Length stddev | Best time (ms) | Avg time (ms) | Time stddev (ms) |
 |---|---:|---:|---:|---:|---:|---:|
-| `gpu_naive` | 8181 | 8181 | 0 | NA | NA | NA |
+| `gpu_naive (eval only)` | 8181 | 8181 | 0 | NA | NA | NA |
 | `cuda_ga` | 7604 | 7795.45 | 208.35 | NA | NA | NA |
 | `cuda_ga_gpu_pop` | 8929 | 9125.4 | 120.514 | 330.932 | 334.398 | 4.3233 |
 | `cuda_ga_gpu_pop_bankconflict` | 8929 | 9125.4 | 120.514 | 327.868 | 330.908 | 1.60382 |
@@ -337,21 +343,15 @@ Per-implementation results from that sweep:
 
 Interpretation:
 
-- `cuda_ga_b5_bigpop` is the best quality variant in the latest completed Berlin52 sweep and reaches the known Berlin52 optimum `7542` consistently across runs.
+- `cuda_ga_b5_bigpop` is the best quality variant in the latest completed Berlin52 sweep and reaches the optimum `7542` consistently across runs.
 - `cuda_ga_gpu_pop_global_dist` is the fastest timed CUDA variant on Berlin52 under the standardized settings, but it does not match the solution quality of `cuda_ga_b5_bigpop`.
 - The current Berlin52 tradeoff is still quality versus speed, not one variant dominating both.
 
 Timing caveat:
 
-- `NA` timing cells in the Berlin52 table above come from the 5532233 sweep, which ran before the SLURM build-skip guard was removed. That guard short-circuited `make all_cuda_versions` whenever `build/CUDA-GA-C5-bigpop` already existed on disk, so source edits that added or changed timing prints (the chrono-based `CUDA kernel elapsed ms:` line in the AoS / ParallelSort / VerboseComments / B-series variants) never propagated into the binaries that were actually executed. The runner's awk extractor then found nothing to parse and recorded NA. With the guard gone, a fresh sweep populates these cells.
-- The Slurm parser still grabs `CUDA kernel elapsed ms` from stdout. Source-side per-variant CSV writing (`src/cpp/result_writer.h`, included by the B and C variants) is wired in but currently inert — the runner does not yet set `RESULT_CSV` / `RUN_ID` env vars to activate it. That is the next planned hardening step; it does not block reruns.
-- `cuda_ga_no_greedy` and `cuda_ga_c1` through `cuda_ga_c5` will appear automatically once a fresh sweep completes.
-
-To regenerate this table after a fresh sweep, point the script at the new job IDs:
-
-```bash
-make refresh_readme_cuda_results
-```
+- `NA` timing cells in these tables come from historical completed result files that were generated before those binaries were rerun with the now-standard timing export.
+- `gpu_naive (eval only)` remains in the table as a correctness reference, but its timing is not comparable to the GA variant timings.
+- The newest `cuda_ga_no_greedy` and `cuda_ga_c1` through `cuda_ga_c5` variants will appear automatically once a completed standardized sweep writes non-empty run and average CSVs for them.
 
 ## Optimization Story
 
@@ -361,7 +361,7 @@ The repo currently has one implemented optimization story family:
 - B2: bitmask-based OX bookkeeping
 - B3-reduce / B3-shuffle: faster elite selection
 - B4-global / B4-smem: distance-memory layout experiments
-- B5-bigpop: large population layout plus greedy nearest-neighbor seeding
+- B5-bigpop: large 512-individual island layout in global memory
 
 A useful way to think about the current result split is:
 
@@ -370,21 +370,21 @@ A useful way to think about the current result split is:
 
 Current hypothesis for why B5 is much better on Berlin52:
 
-1. B5 computes nearest-neighbor tours on the GPU with `greedy_nn_kernel`, chooses the best start city, and seeds each island from that strong tour with only small perturbations.
-2. B1-B4 start each island from a fully random permutation, so they spend many generations climbing out of much worse initial tours.
-3. On Berlin52 with `2000` generations and `256` islands, initialization quality appears to dominate the kernel-level improvements.
-4. The identical or near-identical B1-B4 aggregate results suggest those variants are still exploring essentially the same search basin, just with different implementation details.
+1. B5 does not use greedy seeding; it still starts from random permutations like the rest of the B-family.
+2. The main search-behavior change in B5 is population scale: each island grows to `512` individuals, which increases within-island diversity and gives tournament selection and elitism a much stronger pool to work with.
+3. On Berlin52 with `2000` generations and `256` islands, that larger search budget appears to matter more than the earlier kernel-level optimizations.
+4. The near-identical B1-B4 aggregate results still suggest those variants are mostly changing throughput on the same search process rather than changing the search trajectory itself.
 
-So the current evidence does not say B1-B4 are useless. It says their optimizations are mostly throughput optimizations, while B5 introduced a search-quality optimization.
+So the current evidence does not say B1-B4 are useless. It says their optimizations are mostly throughput optimizations, while B5 is the first B-family variant that materially changes search capacity.
 
 Planned next framing for the optimization story:
 
 - B1-B5: kernel and memory optimization family
-- C1-C5: same progression, but with the C5 endpoint explicitly adding greedy nearest-neighbor population seeding
+- C1-C5: same progression, but each island injects one greedy nearest-neighbor seeded elite and fills the rest of the population randomly
 
 That split would make the comparison cleaner:
 - B-family answers: how much do kernel optimizations help if search behavior stays roughly the same?
-- C-family answers: what changes when the search starts from a stronger population?
+- C-family answers: what changes when each island gets one strong greedy seed without otherwise abandoning random population diversity?
 
 ## Documentation Map
 

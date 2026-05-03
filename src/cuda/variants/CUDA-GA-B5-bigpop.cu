@@ -1,7 +1,7 @@
 // CUDA-GA-B5-bigpop.cu
 // ============================================================
 // Optimization B5: 512-individual islands in global memory
-// with GPU nearest-neighbour seeding and top-k elite reduction.
+// with top-k elite reduction.
 // ============================================================
 
 #include "tsplib_parser.h"
@@ -173,56 +173,6 @@ __device__ void find_top_k_reduce(const int* lengths,
         if (tid == 0) order[pass] = found[pass];
         __syncthreads();
     }
-}
-
-__global__ void greedy_nn_kernel(const int* __restrict__ d_dist,
-                                 int* d_nn_tours,
-                                 int* d_nn_lengths,
-                                 int n) {
-    if (threadIdx.x != 0) return;
-
-    const int start = blockIdx.x;
-    int* tour = d_nn_tours + start * n;
-
-    uint32_t vis0 = 0u, vis1 = 0u, vis2 = 0u, vis3 = 0u;
-#define NN_MARK(c)  do { \
-    if ((c) < 32) vis0 |= (1u << (c)); \
-    else if ((c) < 64) vis1 |= (1u << ((c) - 32)); \
-    else if ((c) < 96) vis2 |= (1u << ((c) - 64)); \
-    else vis3 |= (1u << ((c) - 96)); \
-} while (0)
-#define NN_ISSET(c) ( \
-    (c) < 32 ? (vis0 >> (c)) & 1u : \
-    (c) < 64 ? (vis1 >> ((c) - 32)) & 1u : \
-    (c) < 96 ? (vis2 >> ((c) - 64)) & 1u : \
-               (vis3 >> ((c) - 96)) & 1u )
-
-    int current = start;
-    tour[0] = current;
-    NN_MARK(current);
-    int total = 0;
-
-    for (int pos = 1; pos < n; ++pos) {
-        const int* row = d_dist + current * n;
-        int best_city = -1;
-        int best_d = INT_MAX;
-        for (int city = 0; city < n; ++city) {
-            if (NN_ISSET(city)) continue;
-            if (row[city] < best_d) {
-                best_d = row[city];
-                best_city = city;
-            }
-        }
-        tour[pos] = best_city;
-        NN_MARK(best_city);
-        total += best_d;
-        current = best_city;
-    }
-    total += d_dist[current * n + start];
-    d_nn_lengths[start] = total;
-
-#undef NN_MARK
-#undef NN_ISSET
 }
 
 __global__ void ga_island_kernel(int n, int generations,
