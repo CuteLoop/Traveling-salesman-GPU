@@ -55,7 +55,7 @@ run_variant() {
   shift
   local out="results/${name}_${DATASET_TAG}_${SLURM_JOB_ID}.txt"
   echo "== Running ${name} on ${DATASET} =="
-  /usr/bin/time -v "$@" > "$out" 2>&1
+  "$@" > "$out" 2>&1
   echo "Wrote ${out}"
 }
 

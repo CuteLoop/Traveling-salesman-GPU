@@ -41,6 +41,14 @@ struct GaConfig {
     float mutation_rate = 0.05f;
     int elite_count = 2;
     unsigned int seed = 0;
+    int target_length = -1;
+};
+
+struct GaRunResult {
+    TourResult best;
+    float elapsed_ms = 0.0f;
+    int generations_run = 0;
+    bool target_reached = false;
 };
 
 __device__ unsigned int xorshift32(unsigned int& state) {
@@ -152,6 +160,9 @@ __global__ void ga_island_kernel(int n,
                                  float mutation_rate,
                                  int elite_count,
                                  unsigned int seed,
+                                 int target_length,
+                                 int* stop_flag,
+                                 int* generations_run,
                                  int* best_tours,
                                  int* best_lengths) {
     extern __shared__ int shared[];
@@ -177,7 +188,9 @@ __global__ void ga_island_kernel(int n,
     int* current = pop_a;
     int* next = pop_b;
 
-    for (int generation = 0; generation < generations; ++generation) {
+    int generation = 0;
+
+    while (true) {
         if (tid < BLOCK_POP_SIZE) {
             lengths[tid] = tour_length_const(current + tid * n, n);
         }
@@ -200,8 +213,16 @@ __global__ void ga_island_kernel(int n,
                 order[i] = order[best];
                 order[best] = tmp;
             }
+
+            if (target_length >= 0 && lengths[order[0]] <= target_length) {
+                atomicExch(stop_flag, 1);
+            }
         }
         __syncthreads();
+
+        if (target_length >= 0 && *stop_flag != 0) {
+            break;
+        }
 
         if (tid < elite_count) {
             const int elite_idx = order[tid];
@@ -225,6 +246,11 @@ __global__ void ga_island_kernel(int n,
         current = next;
         next = tmp;
         __syncthreads();
+
+        ++generation;
+        if (target_length < 0 && generation >= generations) {
+            break;
+        }
     }
 
     if (tid < BLOCK_POP_SIZE) {
@@ -233,6 +259,8 @@ __global__ void ga_island_kernel(int n,
     __syncthreads();
 
     if (tid == 0) {
+        generations_run[island] = generation;
+
         int best_idx = 0;
         for (int i = 1; i < BLOCK_POP_SIZE; ++i) {
             if (lengths[i] < lengths[best_idx]) {
@@ -264,6 +292,7 @@ static GaConfig parse_config(int argc, char* argv[]) {
     if (argc > 4) cfg.mutation_rate = std::stof(argv[4]);
     if (argc > 5) cfg.elite_count = std::stoi(argv[5]);
     if (argc > 6) cfg.seed = static_cast<unsigned int>(std::stoul(argv[6]));
+    if (argc > 7) cfg.target_length = std::stoi(argv[7]);
 
     if (cfg.islands < 1) {
         throw std::runtime_error("islands must be at least 1");
@@ -277,12 +306,15 @@ static GaConfig parse_config(int argc, char* argv[]) {
     if (cfg.elite_count < 1 || cfg.elite_count >= BLOCK_POP_SIZE) {
         throw std::runtime_error("elite_count must be in [1, BLOCK_POP_SIZE)");
     }
+    if (cfg.target_length != -1 && cfg.target_length <= 0) {
+        throw std::runtime_error("target_length must be positive when provided");
+    }
 
     return cfg;
 }
 
-static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
-                                        const GaConfig& cfg) {
+static GaRunResult run_gpu_population_ga(const TspMatrixInstance& inst,
+                                         const GaConfig& cfg) {
     const int n = inst.dimension;
     if (n < 2) {
         throw std::runtime_error("TSP dimension must be at least 2");
@@ -302,6 +334,8 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
 
     int* d_best_tours = nullptr;
     int* d_best_lengths = nullptr;
+    int* d_generations_run = nullptr;
+    int* d_stop_flag = nullptr;
 
     const size_t best_tours_bytes =
         sizeof(int) * static_cast<size_t>(cfg.islands) * n;
@@ -309,11 +343,21 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
 
     CUDA_CHECK(cudaMalloc(&d_best_tours, best_tours_bytes));
     CUDA_CHECK(cudaMalloc(&d_best_lengths, best_lengths_bytes));
+    CUDA_CHECK(cudaMalloc(&d_generations_run, sizeof(int) * cfg.islands));
+    CUDA_CHECK(cudaMalloc(&d_stop_flag, sizeof(int)));
+    CUDA_CHECK(cudaMemset(d_generations_run, 0, sizeof(int) * cfg.islands));
+    CUDA_CHECK(cudaMemset(d_stop_flag, 0, sizeof(int)));
 
     const size_t shared_ints =
         2 * static_cast<size_t>(BLOCK_POP_SIZE) * n +
         2 * static_cast<size_t>(BLOCK_POP_SIZE);
     const size_t shared_bytes = sizeof(int) * shared_ints;
+
+    cudaEvent_t start_event = nullptr;
+    cudaEvent_t stop_event = nullptr;
+    CUDA_CHECK(cudaEventCreate(&start_event));
+    CUDA_CHECK(cudaEventCreate(&stop_event));
+    CUDA_CHECK(cudaEventRecord(start_event));
 
     ga_island_kernel<<<cfg.islands, BLOCK_POP_SIZE, shared_bytes>>>(
         n,
@@ -321,13 +365,23 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
         cfg.mutation_rate,
         cfg.elite_count,
         seed,
+        cfg.target_length,
+        d_stop_flag,
+        d_generations_run,
         d_best_tours,
         d_best_lengths);
     CUDA_CHECK(cudaGetLastError());
     CUDA_CHECK(cudaDeviceSynchronize());
+    CUDA_CHECK(cudaEventRecord(stop_event));
+    CUDA_CHECK(cudaEventSynchronize(stop_event));
+
+    float elapsed_ms = 0.0f;
+    CUDA_CHECK(cudaEventElapsedTime(&elapsed_ms, start_event, stop_event));
 
     std::vector<int> h_best_tours(static_cast<size_t>(cfg.islands) * n);
     std::vector<int> h_best_lengths(cfg.islands);
+    std::vector<int> h_generations_run(cfg.islands, 0);
+    int h_stop_flag = 0;
 
     CUDA_CHECK(cudaMemcpy(h_best_tours.data(),
                           d_best_tours,
@@ -337,9 +391,21 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
                           d_best_lengths,
                           best_lengths_bytes,
                           cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(h_generations_run.data(),
+                          d_generations_run,
+                          sizeof(int) * cfg.islands,
+                          cudaMemcpyDeviceToHost));
+    CUDA_CHECK(cudaMemcpy(&h_stop_flag,
+                          d_stop_flag,
+                          sizeof(int),
+                          cudaMemcpyDeviceToHost));
 
     CUDA_CHECK(cudaFree(d_best_tours));
     CUDA_CHECK(cudaFree(d_best_lengths));
+    CUDA_CHECK(cudaFree(d_generations_run));
+    CUDA_CHECK(cudaFree(d_stop_flag));
+    CUDA_CHECK(cudaEventDestroy(start_event));
+    CUDA_CHECK(cudaEventDestroy(stop_event));
 
     int best_island = 0;
     for (int island = 1; island < cfg.islands; ++island) {
@@ -348,24 +414,32 @@ static TourResult run_gpu_population_ga(const TspMatrixInstance& inst,
         }
     }
 
-    TourResult best;
-    best.length = h_best_lengths[best_island];
-    best.tour.assign(h_best_tours.begin() + best_island * n,
-                     h_best_tours.begin() + (best_island + 1) * n);
+    GaRunResult result;
+    result.best.length = h_best_lengths[best_island];
+    result.best.tour.assign(h_best_tours.begin() + best_island * n,
+                            h_best_tours.begin() + (best_island + 1) * n);
+    result.elapsed_ms = elapsed_ms;
+    result.target_reached = (h_stop_flag != 0);
+    for (int island = 0; island < cfg.islands; ++island) {
+        if (h_generations_run[island] > result.generations_run) {
+            result.generations_run = h_generations_run[island];
+        }
+    }
 
-    const int checked_length = cpu_tour_length(inst.dist, best.tour, n);
-    if (checked_length != best.length) {
+    const int checked_length = cpu_tour_length(inst.dist, result.best.tour, n);
+    if (checked_length != result.best.length) {
         throw std::runtime_error("CPU cross-check did not match GPU best length");
     }
 
-    return best;
+    return result;
 }
 
 int main(int argc, char* argv[]) {
     if (argc < 2) {
         std::cerr << "Usage: " << argv[0]
                   << " <file.tsp> [islands=128] [generations=1000]"
-                  << " [mutation_rate=0.05] [elite_count=2] [seed=auto]\n";
+                  << " [mutation_rate=0.05] [elite_count=2] [seed=auto]"
+                  << " [target_length=off]\n";
         std::cerr << "Limits: MAX_CITIES=" << MAX_CITIES
                   << ", BLOCK_POP_SIZE=" << BLOCK_POP_SIZE << "\n";
         return 1;
@@ -385,15 +459,24 @@ int main(int argc, char* argv[]) {
         std::cout << "Generations: " << cfg.generations << "\n";
         std::cout << "Mutation rate: " << cfg.mutation_rate << "\n";
         std::cout << "Elite count per island: " << cfg.elite_count << "\n";
+        if (cfg.target_length >= 0) {
+            std::cout << "Stop mode: target length\n";
+            std::cout << "Target length: " << cfg.target_length << "\n";
+        } else {
+            std::cout << "Stop mode: fixed generations\n";
+        }
 
-        TourResult best = run_gpu_population_ga(inst, cfg);
+        GaRunResult run = run_gpu_population_ga(inst, cfg);
 
-        std::cout << "\nBest GPU-population GA tour length: " << best.length << "\n";
+        std::cout << "CUDA kernel elapsed ms: " << run.elapsed_ms << "\n";
+        std::cout << "Generations completed: " << run.generations_run << "\n";
+        std::cout << "Target reached: " << (run.target_reached ? "yes" : "no") << "\n";
+        std::cout << "\nBest GPU-population GA tour length: " << run.best.length << "\n";
         std::cout << "Best tour (0-based indices):\n";
-        for (int city : best.tour) {
+        for (int city : run.best.tour) {
             std::cout << city << " ";
         }
-        std::cout << best.tour.front() << "\n";
+        std::cout << run.best.tour.front() << "\n";
     }
     catch (const std::exception& e) {
         std::cerr << "Error: " << e.what() << "\n";

@@ -39,6 +39,6 @@ fi
 OUT_TXT="results/cuda_ga_gpu_pop_bitset_${SLURM_JOB_ID}.txt"
 
 echo "Running CUDA-GA-GPU-Pop-bitset on $DATASET"
-/usr/bin/time -v ./build/CUDA-GA-GPU-Pop-bitset "$DATASET" 128 1000 0.05 2 42 > "$OUT_TXT" 2>&1
+./build/CUDA-GA-GPU-Pop-bitset "$DATASET" 128 1000 0.05 2 42 > "$OUT_TXT" 2>&1
 
 echo "Done. Wrote: $OUT_TXT"

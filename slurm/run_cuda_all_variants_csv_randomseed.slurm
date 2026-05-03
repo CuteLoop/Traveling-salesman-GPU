@@ -9,8 +9,8 @@
 #   sbatch --export=ALL,DATASET=sequential/tests/fixtures/smoke_20.tsp,RUNS=10 slurm/run_cuda_all_variants_csv_randomseed.slurm
 #
 # Notes:
-# - `max_rss_kb` comes from `/usr/bin/time` and is host RAM usage, not GPU memory.
 # - Seeds are drawn from /dev/urandom when available, with a time-based fallback.
+# - CUDA timing is parsed from program output when available.
 
 #SBATCH --job-name=tsp_cuda_csv_rand
 #SBATCH --account=ece569
@@ -63,7 +63,7 @@ CSV_OUT="results/cuda_all_variants_randomseed_${DATASET_TAG}_${JOB_TAG}.csv"
 TMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/tsp_cuda_csv_rand_${JOB_TAG}_XXXXXX")"
 trap 'rm -rf "$TMP_DIR"' EXIT
 
-echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,elapsed_seconds,max_rss_kb,status,notes" > "$CSV_OUT"
+echo "variant,binary,version,dataset,run_index,seed,population,islands,generations,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,status,notes" > "$CSV_OUT"
 
 get_dimension() {
   awk -F: '
@@ -114,11 +114,9 @@ run_and_record() {
   shift 9
 
   local stdout_file="$TMP_DIR/${variant}_run${run_index}.out"
-  local time_file="$TMP_DIR/${variant}_run${run_index}.time"
   local rc=0
 
-  /usr/bin/time -f $'elapsed_seconds=%e\nmax_rss_kb=%M' -o "$time_file" \
-    "$@" > "$stdout_file" 2>&1 || rc=$?
+  "$@" > "$stdout_file" 2>&1 || rc=$?
 
   local version=""
   version="$(awk -F': ' '/^VERSION:/ {print $2; exit}' "$stdout_file")"
@@ -141,16 +139,22 @@ run_and_record() {
     length="NA"
   fi
 
-  local elapsed=""
-  elapsed="$(awk -F= '/^elapsed_seconds=/{print $2; exit}' "$time_file")"
-  if [ -z "$elapsed" ]; then
-    elapsed="NA"
+  local elapsed_ms=""
+  elapsed_ms="$(awk -F': ' '/^CUDA kernel elapsed ms:/ {print $2; exit}' "$stdout_file")"
+  if [ -z "$elapsed_ms" ]; then
+    elapsed_ms="NA"
   fi
 
-  local max_rss=""
-  max_rss="$(awk -F= '/^max_rss_kb=/{print $2; exit}' "$time_file")"
-  if [ -z "$max_rss" ]; then
-    max_rss="NA"
+  local generations_completed=""
+  generations_completed="$(awk -F': ' '/^Generations completed:/ {print $2; exit}' "$stdout_file")"
+  if [ -z "$generations_completed" ]; then
+    generations_completed="NA"
+  fi
+
+  local target_reached=""
+  target_reached="$(awk -F': ' '/^Target reached:/ {print $2; exit}' "$stdout_file")"
+  if [ -z "$target_reached" ]; then
+    target_reached="NA"
   fi
 
   local status="ok"
@@ -160,7 +164,7 @@ run_and_record() {
     notes="$(tail -n 1 "$stdout_file" | tr ',' ';' | tr '\r\n' '  ')"
   fi
 
-  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed},${max_rss},${status},${notes}" >> "$CSV_OUT"
+  echo "${variant},${binary},${version},${DATASET},${run_index},${seed},${population},${islands},${generations},${mutation},${elite},${length},${elapsed_ms},${generations_completed},${target_reached},${status},${notes}" >> "$CSV_OUT"
 }
 
 compile_variant "build/GPU-Naive" "src/cuda/GPU-Naive.cu"
@@ -235,7 +239,7 @@ for run_index in $(seq 1 "$RUNS"); do
     run_and_record "cuda_ga_b4_smem" "build/CUDA-GA-B4-smem" "$run_index" "$seed" "NA" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" \
       ./build/CUDA-GA-B4-smem "$DATASET" "$ISLANDS" "$GENERATIONS" "$MUTATION" "$ELITE_POP" "$seed"
   else
-    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$CSV_OUT"
+    echo "cuda_ga_b4_smem,build/CUDA-GA-B4-smem,cuda_ga_b4_smem,${DATASET},${run_index},${seed},NA,${ISLANDS},${GENERATIONS},${MUTATION},${ELITE_POP},NA,NA,NA,NA,skipped,dataset dimension ${DATASET_DIM} exceeds B4-smem limit 99" >> "$CSV_OUT"
   fi
 done
 

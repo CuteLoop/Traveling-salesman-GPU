@@ -39,6 +39,6 @@ fi
 OUT_TXT="results/cuda_ga_gpu_pop_${SLURM_JOB_ID}.txt"
 
 echo "Running CUDA-GA-GPU-Pop on $DATASET"
-/usr/bin/time -v ./build/CUDA-GA-GPU-Pop "$DATASET" 128 1000 0.05 2 42 > "$OUT_TXT" 2>&1
+./build/CUDA-GA-GPU-Pop "$DATASET" 128 1000 0.05 2 42 > "$OUT_TXT" 2>&1
 
 echo "Done. Wrote: $OUT_TXT"
