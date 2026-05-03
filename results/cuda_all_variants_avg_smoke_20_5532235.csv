@@ -1,0 +1,17 @@
+variant,version,dataset,runs,ok_runs,target_hits,best_reported_length,best_cuda_elapsed_ms,best_tour_path,mean_reported_length,stddev_reported_length,mean_cuda_elapsed_ms,stddev_cuda_elapsed_ms,mean_generations_completed
+cuda_ga_gpu_pop_bitset,GPU-Pop Bitset Variant,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,30.3796,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,28.4726,1.65234,500
+cuda_ga_b3_reduce,GPU-Pop B1+B2+B3-reduce,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,93.4108,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,93.3016,0.412932,NA
+cuda_ga_gpu_pop,GPU-Pop Control,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,32.4455,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,30.4586,1.72076,500
+gpu_naive,gpu_naive,sequential/tests/fixtures/smoke_20.tsp,3,3,0,80,0.131357,8 9 18 6 5 19 4 14 13 11 12 15 0 7 3 17 16 1 2 10 8,80,0,0.135038,0.00655082,NA
+cuda_ga_gpu_pop_global_dist,GA-GPU-POP-GlobalDist,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,34.6412,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,34.6408,0.00109697,500
+cuda_ga_gpu_pop_bankconflict,GPU-Pop Bank-Conflict Variant,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,32.2932,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,30.2686,1.75376,500
+cuda_ga_b5_bigpop,GPU-Pop B5-bigpop,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,246.325,13 14 7 3 17 16 1 2 0 15 12 11 6 5 19 4 10 8 9 18 13,73,0,246.701,0.332447,NA
+cuda_ga_b4_global,GPU-Pop B1+B2+B3-shuffle+B4-global,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,93.525,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,93.1482,0.401541,NA
+cuda_ga_b3_shuffle,GPU-Pop B1+B2+B3-shuffle,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,93.4792,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,93.6598,0.188824,NA
+cuda_ga_gpu_pop_parallel_sort,GA-GPU-POP-ParallelSort,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,96.165,0 15 18 9 8 10 4 19 5 6 14 13 12 11 7 17 3 16 1 2 0,73,0,95.2308,0.832296,NA
+cuda_ga_b4_smem,GPU-Pop B1+B2+B3-shuffle+B4-smem,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,93.6983,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,93.6578,0.510209,NA
+cuda_ga_gpu_pop_aos,GA-GPU-POP-AoS,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,174.684,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,169.545,4.45991,NA
+cuda_ga_b2_bitmask,GPU-Pop B1+B2,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,94.1236,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,93.773,0.547147,NA
+cuda_ga_b1_stride,GPU-Pop B1-stride,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,96.0366,9 18 13 11 12 15 0 2 1 16 17 3 7 14 6 5 19 4 10 8 9,73,0,95.2463,0.829161,NA
+cuda_ga_gpu_pop_verbose_comments,GA-GPU-POP-VerboseComments,sequential/tests/fixtures/smoke_20.tsp,3,3,0,73,114.175,0 2 1 16 17 3 7 12 11 13 14 6 5 19 4 10 8 9 18 15 0,73,0,114.732,0.539419,NA
+cuda_ga,cuda_ga,sequential/tests/fixtures/smoke_20.tsp,3,3,0,75,211.354,14 13 5 19 4 10 8 9 18 6 11 12 15 0 3 17 16 1 2 7 14,75,0,208.87,2.15816,NA
