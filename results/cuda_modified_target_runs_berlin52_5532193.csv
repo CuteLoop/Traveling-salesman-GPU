@@ -1,0 +1,11 @@
+variant,binary,version,dataset,target_length,run_index,seed,islands,generations_arg,mutation_rate,elite_count,reported_length,cuda_elapsed_ms,generations_completed,target_reached,status,notes
+cuda_ga_gpu_pop,./build/CUDA-GA-GPU-Pop,GPU-Pop Control,data/berlin52.tsp,8500,1,42,128,1000,0.05,2,8496,6835.6,87653,yes,ok,
+cuda_ga_gpu_pop_bankconflict,./build/CUDA-GA-GPU-Pop-bankconflict,GPU-Pop Bank-Conflict Variant,data/berlin52.tsp,8500,1,42,128,1000,0.05,2,8496,6744.27,87359,yes,ok,
+cuda_ga_gpu_pop_bitset,./build/CUDA-GA-GPU-Pop-bitset,GPU-Pop Bitset Variant,data/berlin52.tsp,8500,1,42,128,1000,0.05,2,8426,445566,6676149,yes,ok,
+cuda_ga_gpu_pop_global_dist,./build/GA-GPU-POP-GlobalDist,GA-GPU-POP-GlobalDist,data/berlin52.tsp,8500,1,42,128,1000,0.05,2,8496,9803.2,95165,yes,ok,
+cuda_ga_gpu_pop,./build/CUDA-GA-GPU-Pop,GPU-Pop Control,data/berlin52.tsp,8500,2,43,128,1000,0.05,2,8463,2489.44,32005,yes,ok,
+cuda_ga_gpu_pop_bankconflict,./build/CUDA-GA-GPU-Pop-bankconflict,GPU-Pop Bank-Conflict Variant,data/berlin52.tsp,8500,2,43,128,1000,0.05,2,8463,2470.36,31998,yes,ok,
+cuda_ga_gpu_pop_bitset,./build/CUDA-GA-GPU-Pop-bitset,GPU-Pop Bitset Variant,data/berlin52.tsp,8500,2,43,128,1000,0.05,2,8183,352294,5281196,yes,ok,
+cuda_ga_gpu_pop_global_dist,./build/GA-GPU-POP-GlobalDist,GA-GPU-POP-GlobalDist,data/berlin52.tsp,8500,2,43,128,1000,0.05,2,8463,3509.16,34033,yes,ok,
+cuda_ga_gpu_pop,./build/CUDA-GA-GPU-Pop,GPU-Pop Control,data/berlin52.tsp,8500,3,44,128,1000,0.05,2,8323,690.749,8878,yes,ok,
+cuda_ga_gpu_pop_bankconflict,./build/CUDA-GA-GPU-Pop-bankconflict,GPU-Pop Bank-Conflict Variant,data/berlin52.tsp,8500,3,44,128,1000,0.05,2,8323,685.921,8882,yes,ok,
