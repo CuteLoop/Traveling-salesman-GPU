@@ -1,0 +1,5 @@
+variant,version,dataset,target_length,runs,ok_runs,target_hits,mean_reported_length,mean_cuda_elapsed_ms,mean_generations_completed
+cuda_ga_gpu_pop_bitset,GPU-Pop Bitset Variant,data/berlin52.tsp,9400,10,10,10,9174.8,69896.2,1.04364e+06
+cuda_ga_gpu_pop,GA-GPU-POP-VerboseComments,data/berlin52.tsp,9400,10,10,0,9460.2,168.755,NA
+cuda_ga_gpu_pop_global_dist,GA-GPU-POP-GlobalDist,data/berlin52.tsp,9400,10,10,10,9300.1,120.561,1163.7
+cuda_ga_gpu_pop_bankconflict,GPU-Pop Bank-Conflict Variant,data/berlin52.tsp,9400,10,10,10,9307.2,89.7988,1140.2
