@@ -31,10 +31,11 @@ cd "$REPO_DIR"
 DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
 mkdir -p results
 
-if [ ! -x ./build/CUDA-GA-GPU-Pop-bankconflict ]; then
-  echo "CUDA-GA-GPU-Pop-bankconflict binary not found, building variant..."
-  make build/CUDA-GA-GPU-Pop-bankconflict
-fi
+# Always rebuild via make so source edits propagate. The previous existence
+# guard could leave a stale binary in place after print/format changes; make
+# is cheap when nothing changed.
+echo "Ensuring CUDA-GA-GPU-Pop-bankconflict is up to date..."
+make build/CUDA-GA-GPU-Pop-bankconflict
 
 OUT_TXT="results/cuda_ga_gpu_pop_bankconflict_${SLURM_JOB_ID}.txt"
 

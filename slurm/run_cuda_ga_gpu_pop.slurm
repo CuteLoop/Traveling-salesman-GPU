@@ -31,10 +31,11 @@ cd "$REPO_DIR"
 DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
 mkdir -p results
 
-if [ ! -x ./build/CUDA-GA-GPU-Pop ]; then
-  echo "CUDA-GA-GPU-Pop binary not found, building first..."
-  bash ./scripts/build.sh
-fi
+# Always rebuild via make so source edits propagate. The previous existence
+# guard could leave a stale binary in place after print/format changes; make
+# is cheap when nothing changed.
+echo "Ensuring CUDA-GA-GPU-Pop is up to date..."
+make build/CUDA-GA-GPU-Pop
 
 OUT_TXT="results/cuda_ga_gpu_pop_${SLURM_JOB_ID}.txt"
 

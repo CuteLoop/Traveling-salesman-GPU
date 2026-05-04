@@ -31,10 +31,11 @@ cd "$REPO_DIR"
 DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
 mkdir -p results
 
-if [ ! -x ./build/GPU-Naive ]; then
-  echo "GPU-Naive binary not found, building first..."
-  bash ./scripts/build.sh
-fi
+# Always rebuild via make so source edits propagate. The previous existence
+# guard could leave a stale binary in place after print/format changes; make
+# is cheap when nothing changed.
+echo "Ensuring GPU-Naive is up to date..."
+make build/GPU-Naive
 
 OUT_TXT="results/gpu_naive_${SLURM_JOB_ID}.txt"
 

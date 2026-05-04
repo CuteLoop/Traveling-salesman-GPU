@@ -31,10 +31,12 @@ cd "$REPO_DIR"
 DATASET="${DATASET:-sequential/tests/fixtures/smoke_20.tsp}"
 mkdir -p results
 
-if [ ! -x ./build/CUDA-GA ]; then
-  echo "CUDA-GA binary not found, building first..."
-  bash ./scripts/build.sh
-fi
+# Always rebuild via make so source edits propagate. The previous guard
+# (`if [ ! -x ./build/CUDA-GA ]`) could leave a stale binary in place after
+# print/format changes; make's dependency tracking is cheap when nothing
+# changed.
+echo "Ensuring CUDA-GA is up to date..."
+make build/CUDA-GA
 
 OUT_TXT="results/cuda_ga_${SLURM_JOB_ID}.txt"
 

@@ -273,35 +273,35 @@ Latest completed standardized CUDA sweep:
 - runner: `slurm/run_cuda_all_variants_csv.slurm`
 - settings: `RUNS=20, ISLANDS=256, GENERATIONS=2000, MUTATION=0.03, ELITE_POP=2, ELITE_HYBRID=4, POP_HYBRID=512, SEED_BASE=100`
 - latest completed artifacts used here:
-  - `results/cuda_all_variants_runs_smoke_20_5532258.csv`
-  - `results/cuda_all_variants_avg_smoke_20_5532258.csv`
+  - `results/cuda_all_variants_runs_smoke_20_5532375.csv`
+  - `results/cuda_all_variants_avg_smoke_20_5532375.csv`
 
 Per-implementation results from that sweep:
 
 | Variant | Best length | Avg length | Length stddev | Best time (ms) | Avg time (ms) | Time stddev (ms) |
 |---|---:|---:|---:|---:|---:|---:|
-| `gpu_naive (eval only)` | 80 | 80 | 0 | 0.123908 | 0.13027 | 0.005707 |
-| `cuda_ga` | 74 | 74.65 | 0.48936 | 559.206 | 561.685 | 2.18129 |
-| `cuda_ga_no_greedy` | 73 | 73.7 | 1.17429 | 559.359 | 564.083 | 6.09395 |
-| `cuda_ga_gpu_pop` | 73 | 73 | 0 | 121.253 | 122.043 | 2.8705 |
-| `cuda_ga_gpu_pop_bankconflict` | 73 | 73 | 0 | 120.223 | 120.467 | 0.315725 |
-| `cuda_ga_gpu_pop_bitset` | 73 | 73 | 0 | 114.945 | 115.121 | 0.091226 |
-| `cuda_ga_gpu_pop_parallel_sort` | 73 | 73 | 0 | 124.759 | 125.496 | 0.468964 |
-| `cuda_ga_gpu_pop_aos` | 73 | 73 | 0 | 625.337 | 626.005 | 0.382793 |
-| `cuda_ga_gpu_pop_global_dist` | 73 | 73 | 0 | 148.799 | 149.132 | 0.215895 |
-| `cuda_ga_gpu_pop_verbose_comments` | 73 | 73 | 0 | 203.256 | 204.368 | 0.72499 |
-| `cuda_ga_b1_stride` | 73 | 73 | 0 | 124.328 | 125.272 | 0.658154 |
-| `cuda_ga_b2_bitmask` | 73 | 73 | 0 | 116.473 | 117.41 | 0.581083 |
-| `cuda_ga_b3_reduce` | 73 | 73 | 0 | 115.818 | 117.327 | 0.642565 |
-| `cuda_ga_b3_shuffle` | 73 | 73 | 0 | 116.367 | 117.497 | 0.673584 |
-| `cuda_ga_b4_global` | 73 | 73 | 0 | 116.516 | 117.231 | 0.520973 |
-| `cuda_ga_b5_bigpop` | 73 | 73 | 0 | 1681.68 | 1683.5 | 1.52303 |
-| `cuda_ga_c1_stride` | 73 | 73 | 0 | 125.343 | 126.115 | 0.737526 |
-| `cuda_ga_c2_bitmask` | 73 | 73 | 0 | 116.27 | 117.256 | 0.503559 |
-| `cuda_ga_c3_reduce` | 73 | 73 | 0 | 116.239 | 117.369 | 0.587855 |
-| `cuda_ga_c4_global` | 73 | 73 | 0 | 117.019 | 117.825 | 0.604088 |
-| `cuda_ga_c5_bigpop` | 73 | 73 | 0 | 1679.8 | 1683.7 | 1.4726 |
-| `cuda_ga_b4_smem` | 73 | 73 | 0 | 115.99 | 117.644 | 1.43144 |
+| `gpu_naive (eval only)` | 80 | 80 | 0 | 0.126852 | 0.131514 | 0.006421 |
+| `cuda_ga` | 74 | 74.65 | 0.48936 | 561.745 | 564.046 | 2.30094 |
+| `cuda_ga_no_greedy` | 73 | 73.7 | 1.17429 | 561.436 | 564.856 | 2.27152 |
+| `cuda_ga_gpu_pop` | 73 | 73 | 0 | 121.215 | 122.087 | 2.91467 |
+| `cuda_ga_gpu_pop_bankconflict` | 73 | 73 | 0 | 120.112 | 120.466 | 0.300516 |
+| `cuda_ga_gpu_pop_bitset` | 73 | 73 | 0 | 114.927 | 115.151 | 0.189846 |
+| `cuda_ga_gpu_pop_parallel_sort` | 73 | 73 | 0 | 124.725 | 126.407 | 1.33541 |
+| `cuda_ga_gpu_pop_aos` | 73 | 73 | 0 | 625.803 | 626.783 | 0.797835 |
+| `cuda_ga_gpu_pop_global_dist` | 73 | 73 | 0 | 148.638 | 149.062 | 0.237839 |
+| `cuda_ga_gpu_pop_verbose_comments` | 73 | 73 | 0 | 203.189 | 204.955 | 1.11084 |
+| `cuda_ga_b1_stride` | 73 | 73 | 0 | 124.232 | 125.3 | 0.746125 |
+| `cuda_ga_b2_bitmask` | 73 | 73 | 0 | 116.671 | 117.691 | 1.23082 |
+| `cuda_ga_b3_reduce` | 73 | 73 | 0 | 116.535 | 117.871 | 0.975001 |
+| `cuda_ga_b3_shuffle` | 73 | 73 | 0 | 116.133 | 117.557 | 0.99224 |
+| `cuda_ga_b4_global` | 73 | 73 | 0 | 116.472 | 117.559 | 0.971294 |
+| `cuda_ga_b5_bigpop` | 73 | 73 | 0 | 1683.7 | 1685.99 | 1.48049 |
+| `cuda_ga_c1_stride` | 73 | 73 | 0 | 124.96 | 126.937 | 1.23231 |
+| `cuda_ga_c2_bitmask` | 73 | 73 | 0 | 116.585 | 117.898 | 1.0843 |
+| `cuda_ga_c3_reduce` | 73 | 73 | 0 | 116.731 | 117.974 | 0.954398 |
+| `cuda_ga_c4_global` | 73 | 73 | 0 | 117.136 | 118.253 | 0.811 |
+| `cuda_ga_c5_bigpop` | 73 | 73 | 0 | 1681.84 | 1686.39 | 1.9697 |
+| `cuda_ga_b4_smem` | 73 | 73 | 0 | 116.749 | 118.626 | 1.20893 |
 
 Notes:
 
@@ -317,29 +317,35 @@ Latest completed standardized CUDA sweep:
 - runner: `slurm/run_cuda_all_variants_csv.slurm`
 - settings: `RUNS=20, ISLANDS=256, GENERATIONS=2000, MUTATION=0.03, ELITE_POP=2, ELITE_HYBRID=4, POP_HYBRID=512, SEED_BASE=100`
 - latest completed artifacts used here:
-  - `results/cuda_all_variants_runs_berlin52_5532233.csv`
-  - `results/cuda_all_variants_avg_berlin52_5532233.csv`
+  - `results/cuda_all_variants_runs_berlin52_5532274.csv`
+  - `results/cuda_all_variants_avg_berlin52_5532274.csv`
 
 Per-implementation results from that sweep:
 
 | Variant | Best length | Avg length | Length stddev | Best time (ms) | Avg time (ms) | Time stddev (ms) |
 |---|---:|---:|---:|---:|---:|---:|
-| `gpu_naive (eval only)` | 8181 | 8181 | 0 | NA | NA | NA |
-| `cuda_ga` | 7604 | 7795.45 | 208.35 | NA | NA | NA |
-| `cuda_ga_gpu_pop` | 8929 | 9125.4 | 120.514 | 330.932 | 334.398 | 4.3233 |
-| `cuda_ga_gpu_pop_bankconflict` | 8929 | 9125.4 | 120.514 | 327.868 | 330.908 | 1.60382 |
-| `cuda_ga_gpu_pop_bitset` | 8929 | 9125.4 | 120.514 | 283.419 | 284.177 | 0.341427 |
-| `cuda_ga_gpu_pop_parallel_sort` | 8836 | 9089.1 | 126.029 | NA | NA | NA |
-| `cuda_ga_gpu_pop_aos` | 8929 | 9125.4 | 120.514 | NA | NA | NA |
-| `cuda_ga_gpu_pop_global_dist` | 8929 | 9125.4 | 120.514 | 279.225 | 279.731 | 0.255912 |
-| `cuda_ga_gpu_pop_verbose_comments` | 8929 | 9125.4 | 120.514 | NA | NA | NA |
-| `cuda_ga_b1_stride` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
-| `cuda_ga_b2_bitmask` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
-| `cuda_ga_b3_reduce` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
-| `cuda_ga_b3_shuffle` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
-| `cuda_ga_b4_global` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
-| `cuda_ga_b5_bigpop` | 7542 | 7542 | 0 | NA | NA | NA |
-| `cuda_ga_b4_smem` | 8777 | 9234.55 | 195.84 | NA | NA | NA |
+| `gpu_naive (eval only)` | 8181 | 8181 | 0 | 0.117045 | 0.132069 | 0.005729 |
+| `cuda_ga` | 7604 | 7795.45 | 208.35 | 873.534 | 878.081 | 3.93289 |
+| `cuda_ga_no_greedy` | 7718 | 8275.75 | 226.052 | 888.723 | 893.529 | 2.90515 |
+| `cuda_ga_gpu_pop` | 8929 | 9125.4 | 120.514 | 332.4 | 334.779 | 3.68133 |
+| `cuda_ga_gpu_pop_bankconflict` | 8929 | 9125.4 | 120.514 | 328.022 | 330.536 | 1.09669 |
+| `cuda_ga_gpu_pop_bitset` | 8929 | 9125.4 | 120.514 | 283.716 | 283.998 | 0.215688 |
+| `cuda_ga_gpu_pop_parallel_sort` | 8836 | 9089.1 | 126.029 | 262.054 | 264.198 | 1.43638 |
+| `cuda_ga_gpu_pop_aos` | 8929 | 9125.4 | 120.514 | 823.995 | 825.036 | 0.975611 |
+| `cuda_ga_gpu_pop_global_dist` | 8929 | 9125.4 | 120.514 | 279.251 | 279.633 | 0.244034 |
+| `cuda_ga_gpu_pop_verbose_comments` | 8929 | 9125.4 | 120.514 | 416.183 | 418.509 | 1.34174 |
+| `cuda_ga_b1_stride` | 8777 | 9234.55 | 195.84 | 260.978 | 262.716 | 0.847132 |
+| `cuda_ga_b2_bitmask` | 8777 | 9234.55 | 195.84 | 246.046 | 247.056 | 0.748003 |
+| `cuda_ga_b3_reduce` | 8777 | 9234.55 | 195.84 | 246.055 | 247.162 | 0.773716 |
+| `cuda_ga_b3_shuffle` | 8777 | 9234.55 | 195.84 | 245.797 | 247.297 | 0.888541 |
+| `cuda_ga_b4_global` | 8777 | 9234.55 | 195.84 | 245.997 | 247.04 | 0.692264 |
+| `cuda_ga_b5_bigpop` | 7542 | 7590.1 | 66.7288 | 7484.76 | 7513.55 | 25.3839 |
+| `cuda_ga_c1_stride` | 7909 | 8079.4 | 112.122 | 261.281 | 306.977 | 161.502 |
+| `cuda_ga_c2_bitmask` | 7909 | 8079.4 | 112.122 | 245.709 | 246.705 | 0.891915 |
+| `cuda_ga_c3_reduce` | 7909 | 8079.4 | 112.122 | 245.692 | 246.991 | 1.55146 |
+| `cuda_ga_c4_global` | 7909 | 8079.4 | 112.122 | 247.521 | 248.357 | 0.746895 |
+| `cuda_ga_c5_bigpop` | 7542 | 7542 | 0 | 7490.05 | 7521.45 | 21.2939 |
+| `cuda_ga_b4_smem` | 8777 | 9234.55 | 195.84 | 315.985 | 318.503 | 1.46895 |
 
 Interpretation:
 
@@ -349,9 +355,9 @@ Interpretation:
 
 Timing caveat:
 
-- `NA` timing cells in these tables come from historical completed result files that were generated before those binaries were rerun with the now-standard timing export.
-- `gpu_naive (eval only)` remains in the table as a correctness reference, but its timing is not comparable to the GA variant timings.
-- The newest `cuda_ga_no_greedy` and `cuda_ga_c1` through `cuda_ga_c5` variants will appear automatically once a completed standardized sweep writes non-empty run and average CSVs for them.
+- The Berlin52 table above is populated end-to-end after the SLURM build-skip guard was removed and the sweep was rerun (job 5532274). Earlier completed CSVs (e.g. 5532233) had `NA` timing for many variants; those came from stale binaries that pre-dated the timing prints in the source — see [Current Caveats](#current-caveats).
+- `gpu_naive (eval only)` remains in the table as a correctness reference, but its timing measures only a tiny verification kernel and is not comparable to the GA variants.
+- The newest `cuda_ga_no_greedy` and `cuda_ga_c1` through `cuda_ga_c5` variants now appear in both tables.
 
 ## Optimization Story
 
@@ -410,9 +416,20 @@ Experiments and report:
 
 ## Current Caveats
 
-- The Berlin52 timing table contains NA cells inherited from a sweep that ran while the SLURM build-skip guard was still active. Removing that guard (May 2026) means the next sweep on `data/berlin52.tsp` will populate the missing columns. See the [Timing caveat](#berlin52) note for full context.
-- The B1–B4 family ties on Berlin52 quality (best=8777, avg=9234.55, std=195.84) because each B-step is a strict superset of the previous one's optimizations applied to the same GA, with the same RNG seed sequence. Identical statistics across them is the *intended* correctness invariant of the optimization story (changing how the kernel runs without changing what it computes), not evidence that the binaries are colliding. B5 differs because `BLOCK_POP_SIZE = 512` (vs `32` for B1–B4), giving a 16× larger total population.
-- `gpu_naive` reports the CPU greedy nearest-neighbor tour length; it does not run a GA and is not directly comparable to the GA variants on solution quality.
-- `result_writer.h` is wired into B1–B5 and C1–C5 source code so that future sweeps can bypass stdout-grep extraction. It activates only when the runner sets `RESULT_CSV` and `RUN_ID`; that runner integration is not yet done, so the helper is currently inert and the legacy stdout-grep path is what's in use.
+- The B1–B4 family ties on Berlin52 quality (best=8777, avg=9234.55, std=195.84) because each B-step is a strict superset of the previous one's optimizations applied to the same GA with the same RNG seed sequence. Identical quality statistics across them is the *intended* correctness invariant of the optimization story — the kernel changes how it runs without changing what it computes — not evidence that the binaries are colliding. Their timing values do diverge run-to-run as the optimizations bite: `b1_stride` lands around `260 ms`, `b4_global` around `246 ms`. B5 differs in both quality and timing because `BLOCK_POP_SIZE = 512` (vs `32` for B1–B4), giving a 16× larger per-island population that converges to optimum 7542 every run, at the cost of much longer per-island compute.
+- The C-family "NN seeding" is precise: each island has its `tid == 0` thread copy the global-best NN tour into `current[0]` and apply 2–9 random swaps; all other `tid > 0` threads use random Fisher-Yates. So C1–C4 inject 1 NN-seeded individual out of 32 (≈3.1%) and C5 injects 1 out of 512 (≈0.2%). C5's quality on Berlin52 (avg=7542, std=0) shows the seed is enough to dominate via elitism, but the percentage is small.
+- `gpu_naive` reports the CPU greedy nearest-neighbor tour length and is labeled `gpu_naive (eval only)` in the result tables; its CUDA timing measures only a verification kernel and is not directly comparable to the GA variants.
+- `result_writer.h` is wired into B1–B5 and C1–C5 source so future sweeps can bypass stdout-grep extraction. It activates only when the runner sets `RESULT_CSV` and `RUN_ID`. That runner integration is not yet done — the helper is currently inert and the legacy stdout-grep path is what's in use. The legacy path is reliable now that all SLURM runners always invoke `make` (no more stale-binary skips).
+- B5 ships a `greedy_nn_kernel` definition in `src/cuda/variants/CUDA-GA-B5-bigpop.cu` that is never invoked. It is dead code — B5 actually uses pure random Fisher-Yates init across all threads. The kernel was scaffolding inherited from the C5 line and has been left in place pending a decision to delete or wire.
 - The sequential C parser and the CUDA parser do not yet use identical TSPLIB distance semantics for every TSPLIB instance, so direct sequential-vs-CUDA comparisons on `berlin52.tsp` should be treated carefully.
 - The root Makefile and the Slurm scripts are much closer now, but the experiment notes remain the most reliable source of truth for reruns.
+
+### SLURM build-skip guards (fixed)
+
+Every SLURM script that invokes a built binary now defers to `make` rather than short-circuiting on binary existence:
+
+- `slurm/run_cuda_all_variants_csv.slurm` — `build_cuda_variants` (with retry on transient NFS failures) followed by `verify_required_binaries` (pre-flight check that all 21 expected binaries exist).
+- `slurm/run_cuda_all_variants.slurm` — unconditional `make all_cuda_versions`.
+- `slurm/run_cuda_ga.slurm`, `slurm/run_cuda_ga_gpu_pop.slurm`, `slurm/run_cuda_ga_gpu_pop_bankconflict.slurm`, `slurm/run_cuda_ga_gpu_pop_bitset.slurm`, `slurm/run_gpu_naive.slurm`, `slurm/run_sequential.slurm` — unconditional `make build/<target>`.
+
+The previous `if [ ! -x ./build/<target> ]; then make` pattern caused stale binaries to silently survive source edits — for example, when a `CUDA kernel elapsed ms:` print was added to a variant's source after its binary had been cached, the SLURM sweep kept running the old binary and the stdout-grep extractor produced NA in the resulting CSV. With the guard gone, `make`'s own dependency tracking incrementally rebuilds only the variants whose source has changed.

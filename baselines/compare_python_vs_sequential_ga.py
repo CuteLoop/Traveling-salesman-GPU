@@ -6,8 +6,15 @@ import time
 from pathlib import Path
 
 import pandas as pd
-from pyCombinatorial.algorithm import genetic_algorithm
+from pyCombinatorial.algorithm.ga import genetic_algorithm
 from pyCombinatorial.utils import util
+
+
+CUDA_EQUIV_POP = 512
+CUDA_EQUIV_GENERATIONS = 2000
+CUDA_EQUIV_MUTATION = 0.03
+CUDA_EQUIV_ELITE = 4
+CUDA_EQUIV_SEED = 100
 
 
 def load_tsplib_coords(path):
@@ -191,11 +198,11 @@ def run_sequential_ga(repo_root, tsp_file, pop, generations, mutation_rate, elit
 def main():
     parser = argparse.ArgumentParser(description="Compare Python baseline GA vs sequential C GA on same TSPLIB instance")
     parser.add_argument("--tsp", default="sequential/tests/fixtures/smoke_20.tsp", help="Path to TSPLIB coordinate file")
-    parser.add_argument("--pop", type=int, default=100, help="Population size for both runs")
-    parser.add_argument("--gen", type=int, default=200, help="Generation count for both runs")
-    parser.add_argument("--mutation", type=float, default=0.1, help="Mutation rate for both runs")
-    parser.add_argument("--elite", type=int, default=2, help="Elite count for both runs")
-    parser.add_argument("--seed", type=int, default=42, help="Seed for both runs")
+    parser.add_argument("--pop", type=int, default=CUDA_EQUIV_POP, help="Population size for both runs; default matches the CUDA hybrid population")
+    parser.add_argument("--gen", type=int, default=CUDA_EQUIV_GENERATIONS, help="Generation count for both runs; default matches the CUDA standardized sweep")
+    parser.add_argument("--mutation", type=float, default=CUDA_EQUIV_MUTATION, help="Mutation rate for both runs; default matches the CUDA standardized sweep")
+    parser.add_argument("--elite", type=int, default=CUDA_EQUIV_ELITE, help="Elite count for both runs; default matches the CUDA hybrid elite count")
+    parser.add_argument("--seed", type=int, default=CUDA_EQUIV_SEED, help="Seed for both runs; default matches the CUDA standardized sweep")
     parser.add_argument("--python-verbose", action="store_true", help="Enable verbose output in pyCombinatorial")
     parser.add_argument("--no-release-build", action="store_true", help="Do not force BUILD=release for sequential make")
     args = parser.parse_args()
@@ -233,6 +240,7 @@ def main():
     print("=== Comparison: Python baseline GA vs Sequential C GA ===")
     print(f"Instance: {tsp_path}")
     print(f"Population: {args.pop}, Generations: {args.gen}, Mutation: {args.mutation}, Elite: {args.elite}, Seed: {args.seed}")
+    print("Timing method: wall-clock around each solver run; sequential timing excludes the make build step.")
     print()
     print("Python baseline (pyCombinatorial):")
     print(f"  Distance: {py_dist:.6f}")
@@ -268,6 +276,7 @@ def main():
             "seed": args.seed,
             "distance": py_dist,
             "time_sec": py_time,
+            "time_measurement": "wall_clock_solver_only",
             "tour_length": len(py_route),
             "tour_order": cycle_string(py_route),
             "same_tour_rotation_reversal": same_tour,
@@ -283,6 +292,7 @@ def main():
             "seed": args.seed,
             "distance": c_dist,
             "time_sec": c_time,
+            "time_measurement": "wall_clock_solver_only_excludes_build",
             "tour_length": len(c_route),
             "tour_order": cycle_string(c_route),
             "same_tour_rotation_reversal": same_tour,
@@ -302,6 +312,8 @@ def main():
                 f"mutation={args.mutation}",
                 f"elite={args.elite}",
                 f"seed={args.seed}",
+                "timing_method=wall_clock_solver_only",
+                "sequential_timing_excludes_build=true",
                 f"python_distance={py_dist:.6f}",
                 f"python_time_sec={py_time:.6f}",
                 f"c_distance={c_dist:.6f}",

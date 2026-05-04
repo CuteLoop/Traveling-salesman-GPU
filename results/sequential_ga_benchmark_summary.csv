@@ -1,0 +1,2 @@
+instance,runs,population,generations,mutation,elite,seed_base,tournament_k,crossover_probability,timing_method,best_length_found,best_length_seed,best_tour_order,avg_length,std_length,avg_time_sec,std_time_sec
+C:\Users\ual-laptop\Documents\Traveling-salesman-GPU\sequential\tests\fixtures\smoke_20.tsp,10,512,2000,0.03,4,100,3,0.9,wall_clock_solver_only_excludes_build,75.776906,100,18 -> 15 -> 2 -> 1 -> 16 -> 3 -> 17 -> 7 -> 0 -> 11 -> 12 -> 13 -> 14 -> 6 -> 5 -> 19 -> 4 -> 10 -> 8 -> 9 -> 18,76.3905224,1.040379379236164,1.4304390999721364,0.2956543702948164

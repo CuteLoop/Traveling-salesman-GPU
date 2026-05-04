@@ -30,10 +30,11 @@ cd "$REPO_DIR"
 DATASET="sequential/tests/fixtures/smoke_20.tsp"
 mkdir -p results
 
-if [ ! -x ./build/Sequential ]; then
-  echo "Sequential binary not found, building first..."
-  bash ./scripts/build.sh
-fi
+# Always rebuild via make so source edits propagate. The previous existence
+# guard could leave a stale binary in place after source changes; make is
+# cheap when nothing changed.
+echo "Ensuring Sequential is up to date..."
+make build/Sequential
 
 OUT_TXT="results/sequential_${SLURM_JOB_ID}.txt"
 OUT_CSV="results/sequential_stats_${SLURM_JOB_ID}.csv"
